@@ -1,0 +1,326 @@
+{
+  "name": "Visão do Time — backlog e resumo",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Visão do Time — backlog e resumo\n\nUm único webhook serve o painel. A ação vem no corpo:\n\n| `acao` | o que faz |\n|---|---|\n| `carregar` | devolve `{demandas, atualizadoEm}` |\n| `salvar` | grava o backlog inteiro |\n| `resumo` | posta o texto no canal do Teams |\n\n### Antes de ativar\n\n1. **Webhook** → _Options_ → **Allowed Origins (CORS)**: troque `*` pela origem\n   do painel (ex.: `https://mohamadkdb.github.io`). Sem CORS o navegador não lê\n   a resposta e o `carregar` não funciona.\n2. **Postgres**: aponte para seu banco. Serve tanto um Postgres próprio quanto\n   o Supabase (use a connection string do projeto). Rode o SQL abaixo.\n3. **Microsoft Teams**: preencha Team e Channel — estão como `SUBSTITUA`.\n4. Copie a **URL de produção** do webhook e cole no painel, em\n   _Configurar envio e sincronização_.\n\n### Tabela\n\n```sql\ncreate table if not exists visao_time_backlog (\n  id            text primary key default 'atual',\n  demandas      jsonb not null default '[]'::jsonb,\n  atualizado_em timestamptz not null default now(),\n  atualizado_por text\n);\n```\n\nÉ uma linha só (`id = 'atual'`) com o backlog inteiro em `jsonb`. Simples de\npropósito: o painel manda o estado completo, não diffs.\n\n### Se quiser histórico\n\nAcrescente um `insert` numa tabela append-only no branch `salvar` — dá para\nreconstruir a evolução do farol semana a semana.",
+        "height": 720,
+        "width": 460
+      },
+      "id": "sticky-instrucoes",
+      "name": "Leia primeiro",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-360, -60]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "visao-time",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "webhook-painel",
+      "name": "Webhook — painel",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [160, 200],
+      "webhookId": "visao-time-painel"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "cond-carregar",
+                    "leftValue": "={{ $json.body.acao }}",
+                    "rightValue": "carregar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "carregar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "cond-salvar",
+                    "leftValue": "={{ $json.body.acao }}",
+                    "rightValue": "salvar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "salvar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "cond-resumo",
+                    "leftValue": "={{ $json.body.acao }}",
+                    "rightValue": "resumo",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "resumo"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "desconhecida"
+        }
+      },
+      "id": "switch-acao",
+      "name": "Qual ação?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [380, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select demandas, atualizado_em, atualizado_por\n  from visao_time_backlog\n where id = 'atual'\n limit 1;",
+        "options": {}
+      },
+      "id": "pg-carregar",
+      "name": "Postgres — ler backlog",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [640, -40],
+      "alwaysOutputData": true,
+      "notesInFlow": true,
+      "notes": "alwaysOutputData ligado: sem isso, banco vazio devolve zero itens, o branch morre e o webhook estoura por timeout."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normaliza a resposta: banco vazio tem de virar lista vazia, não erro.\n// jsonb costuma chegar já desserializado, mas alguns drivers devolvem string.\nconst linha = items.length ? items[0].json : {};\nlet demandas = linha.demandas ?? [];\n\nif (typeof demandas === 'string') {\n  try { demandas = JSON.parse(demandas); } catch (e) { demandas = []; }\n}\nif (!Array.isArray(demandas)) demandas = [];\n\nreturn [{\n  json: {\n    demandas,\n    atualizadoEm: linha.atualizado_em ?? null,\n    atualizadoPor: linha.atualizado_por ?? null,\n    total: demandas.length\n  }\n}];"
+      },
+      "id": "code-normalizar",
+      "name": "Normalizar resposta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, -40]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "resp-carregar",
+      "name": "Responder — backlog",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1080, -40]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into visao_time_backlog (id, demandas, atualizado_em, atualizado_por)\nvalues ('atual', $1::jsonb, now(), $2)\non conflict (id) do update\n   set demandas       = excluded.demandas,\n       atualizado_em  = now(),\n       atualizado_por = excluded.atualizado_por\nreturning atualizado_em;",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json.body.demandas || []), $json.body.autor || 'painel'] }}"
+        }
+      },
+      "id": "pg-salvar",
+      "name": "Postgres — gravar backlog",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [640, 160],
+      "notesInFlow": true,
+      "notes": "Query parametrizada de propósito: título de demanda com apóstrofo quebraria SQL montado por concatenação."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true, \"atualizadoEm\": $json.atualizado_em } }}",
+        "options": {}
+      },
+      "id": "resp-salvar",
+      "name": "Responder — gravado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [860, 160]
+    },
+    {
+      "parameters": {
+        "resource": "channelMessage",
+        "operation": "create",
+        "teamId": "SUBSTITUA_TEAM_ID",
+        "channelId": "SUBSTITUA_CHANNEL_ID",
+        "contentType": "text",
+        "message": "={{ $json.body.texto }}",
+        "options": {}
+      },
+      "id": "teams-postar",
+      "name": "Teams — postar no canal",
+      "type": "n8n-nodes-base.microsoftTeams",
+      "typeVersion": 2,
+      "position": [640, 360],
+      "notesInFlow": true,
+      "notes": "Usa a API do Graph — não depende dos Incoming Webhooks desativados em maio/2026. Para mensagem curta troque por $json.body.textoCurto."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true, \"postado\": true } }}",
+        "options": {}
+      },
+      "id": "resp-resumo",
+      "name": "Responder — postado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [860, 360]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "={{ { \"ok\": false, \"erro\": \"acao desconhecida\", \"recebido\": $json.body.acao || null, \"aceitas\": [\"carregar\", \"salvar\", \"resumo\"] } }}",
+        "options": {}
+      },
+      "id": "resp-desconhecida",
+      "name": "Responder — ação desconhecida",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [640, 560]
+    }
+  ],
+  "connections": {
+    "Webhook — painel": {
+      "main": [
+        [
+          {
+            "node": "Qual ação?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qual ação?": {
+      "main": [
+        [
+          {
+            "node": "Postgres — ler backlog",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres — gravar backlog",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Teams — postar no canal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder — ação desconhecida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — ler backlog": {
+      "main": [
+        [
+          {
+            "node": "Normalizar resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar resposta": {
+      "main": [
+        [
+          {
+            "node": "Responder — backlog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — gravar backlog": {
+      "main": [
+        [
+          {
+            "node": "Responder — gravado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Teams — postar no canal": {
+      "main": [
+        [
+          {
+            "node": "Responder — postado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "visao-time-ai"
+  },
+  "tags": []
+}

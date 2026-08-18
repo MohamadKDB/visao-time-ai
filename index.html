@@ -43,6 +43,9 @@
   header.top{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
   h1{font-size:20px;margin:0;letter-spacing:-.01em}
   .sub{color:var(--ink-2);font-size:13px;margin-top:2px}
+  .sync{font-size:11.5px;color:var(--muted);margin-top:3px;min-height:15px}
+  .sync.bom{color:var(--good-ink)}
+  .sync.ruim{color:var(--warning-ink)}
   .toolbar{display:flex;flex-wrap:wrap;gap:8px}
   button,select,input[type=text],input[type=date],input[type=number],textarea{
     font:inherit;color:var(--ink);background:var(--surface);
@@ -225,6 +228,7 @@
     <div>
       <h1>Backlog · Farol de Demandas</h1>
       <div class="sub" id="subtitulo">Acompanhamento de D.O.R, Status e D.O.D</div>
+      <div class="sync" id="sync"></div>
     </div>
     <div class="toolbar">
       <button id="btnNova" class="primary">+ Nova demanda</button>
@@ -290,7 +294,9 @@
       <p><b>🟢 Verde</b> — no prazo, sem bloqueio, checklist coerente com o estágio.</p>
       <p><b>🔵 Entregue</b> — status Concluído com D.O.D 100%.</p>
       <p>Você pode sobrescrever o farol manualmente no painel da demanda (campo <i>Farol</i>) quando o cálculo não refletir a realidade — o motivo fica registrado.</p>
-      <p><b>Importante sobre os dados:</b> esta página não guarda nada sozinha. Depois de editar, clique em <b>Salvar (.json)</b> para baixar o arquivo, e em <b>Carregar</b> na próxima vez para continuar de onde parou. Guarde esse .json numa pasta ou no drive do time.</p>
+      <p><b>Como os dados são salvos:</b> cada edição é gravada sozinha, na hora — primeiro neste navegador, depois no n8n, se o webhook estiver configurado em <i>Resumo no Teams → Configurar envio e sincronização</i>. A linha embaixo do título mostra o estado: <i>salvando…</i>, <i>sincronizado 14:32</i> ou o motivo da falha.</p>
+      <p>Sem o webhook, o backlog vive só neste navegador e não é compartilhado. Com ele, o n8n é a fonte da verdade: ao abrir a página, o que está no servidor sobrescreve a cópia local. <b>Duas pessoas editando ao mesmo tempo se sobrescrevem</b> — a última gravação vence.</p>
+      <p><b>Salvar (.json)</b> e <b>Carregar</b> continuam existindo, agora como backup e importação — não são mais necessários no dia a dia.</p>
     </div>
   </details>
 </div>
@@ -530,7 +536,120 @@ function renderTabela(){
   tb.querySelectorAll("tr").forEach(tr=>tr.onclick=()=>abrir(tr.dataset.id));
 }
 
-function renderTudo(){ renderKpis(); renderCharts(); renderTabela(); }
+/* renderTudo() é chamado por toda mutação de DADOS, então pendurar a
+   persistência aqui garante que nenhum ponto de edição fique de fora — o
+   esquecimento era justamente o problema do "Salvar (.json)" manual. */
+function renderTudo(){ renderKpis(); renderCharts(); renderTabela(); persistir(); }
+
+/* ---------- persistência ---------- */
+const LS_DADOS = "visaotime.dados";
+let semPersistir = false;              /* ligado durante cargas, para não regravar o que acabou de chegar */
+let sync = {local:null, remoto:null, erro:null, pendente:false};
+let timerSalvar = null;
+
+/* Toda entrada de dados passa por aqui — arquivo, localStorage ou n8n.
+   Campos ausentes ganham padrão e valores fora das listas são descartados. */
+function normalizar(arr){
+  return arr.map(i=>({
+    id:i.id||"—", titulo:i.titulo||"", sprint:i.sprint||"",
+    prioridade:PRIORIDADES.includes(i.prioridade)?i.prioridade:"Média",
+    esforco:+i.esforco||0, status:STATUSES.includes(i.status)?i.status:"Backlog",
+    inicio:i.inicio||"", previsto:i.previsto||"", entrega:i.entrega||"",
+    dor:DOR_ITENS.map((_,k)=>i.dor?.[k]?1:0), dod:DOD_ITENS.map((_,k)=>i.dod?.[k]?1:0),
+    bloqueado:!!i.bloqueado, motivo:i.motivo||"", farolManual:i.farolManual||"auto",
+    comentarios:Array.isArray(i.comentarios)?i.comentarios:[]
+  }));
+}
+
+function salvarLocal(){
+  try{
+    localStorage.setItem(LS_DADOS, JSON.stringify({versao:1, atualizado:new Date().toISOString(), demandas:DADOS}));
+    sync.local = new Date();
+  }catch(e){ sync.erro = "localStorage bloqueado"; }
+}
+function carregarLocal(){
+  try{
+    const j = JSON.parse(localStorage.getItem(LS_DADOS) || "null");
+    if(j && Array.isArray(j.demandas)){
+      DADOS = normalizar(j.demandas);
+      /* aproveita o timestamp gravado: sem isso o indicador fica vazio após o
+         F5 e dá a impressão de que nada está salvo */
+      if(j.atualizado) sync.local = new Date(j.atualizado);
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+/* Uma única porta para o n8n: carregar, salvar e resumo usam o mesmo webhook,
+   distinguidos por `acao`. */
+async function chamarN8n(acao, extra){
+  const url = cfg(LS_HOOK).trim();
+  if(!url) return {ok:false, motivo:"sem webhook configurado"};
+  const headers = {"Content-Type":"application/json"};
+  const token = cfg(LS_TOKEN).trim();
+  if(token) headers["Authorization"] = "Bearer " + token;
+  try{
+    const res = await fetch(url, {method:"POST", headers, body: JSON.stringify({acao, ...(extra||{})})});
+    if(!res.ok) return {ok:false, motivo:`o fluxo respondeu ${res.status}`};
+    let dados = null;
+    try{ dados = await res.json(); }catch(e){}
+    return {ok:true, dados: Array.isArray(dados) ? dados[0] : dados};
+  }catch(e){ return {ok:false, motivo:"CORS ou rede — libere Allowed Origins no nó Webhook"}; }
+}
+
+function persistir(){
+  if(semPersistir) return;
+  salvarLocal();
+  if(!cfg(LS_HOOK).trim()){ renderSync(); return; }
+  sync.pendente = true; renderSync();
+  clearTimeout(timerSalvar);
+  timerSalvar = setTimeout(async ()=>{
+    const r = await chamarN8n("salvar", {demandas: DADOS});
+    sync.pendente = false;
+    if(r.ok){ sync.remoto = new Date(); sync.erro = null; }
+    else sync.erro = r.motivo;
+    renderSync();
+  }, 1500);
+}
+
+function renderSync(){
+  const el = $("#sync"); if(!el) return;
+  const hora = dt => dt.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+  const remoto = !!cfg(LS_HOOK).trim();
+  let txt = "", cls = "";
+  if(sync.pendente)          { txt = "salvando…"; }
+  else if(sync.erro)         { txt = `salvo neste navegador · n8n: ${sync.erro}`; cls = "ruim"; }
+  else if(remoto && sync.remoto){ txt = `sincronizado ${hora(sync.remoto)}`; cls = "bom"; }
+  else if(sync.local)        { txt = `salvo neste navegador ${hora(sync.local)}`; }
+  el.textContent = txt;
+  el.className = "sync " + cls;
+  el.title = remoto ? "Backlog compartilhado via n8n" : "Só neste navegador — configure o webhook do n8n para compartilhar";
+}
+
+async function sincronizarDoServidor(silencioso){
+  if(!cfg(LS_HOOK).trim()) return;
+  const r = await chamarN8n("carregar");
+  if(!r.ok){ sync.erro = r.motivo; renderSync(); if(!silencioso) toast(`Não consegui ler do n8n: ${r.motivo}`, 5000); return; }
+  const remotas = Array.isArray(r.dados?.demandas) ? r.dados.demandas : [];
+
+  /* Banco vazio com dados locais na mão: sobe o local em vez de apagá-lo.
+     Sem esta guarda, o primeiro acesso com o fluxo recém-criado zeraria o backlog. */
+  if(!remotas.length && DADOS.length){
+    sync.erro = null; renderSync();
+    persistir();
+    if(!silencioso) toast("Banco vazio — enviei o backlog local para o n8n", 4000);
+    return;
+  }
+
+  semPersistir = true;
+  DADOS = normalizar(remotas);
+  popular(); renderTudo();
+  semPersistir = false;
+  salvarLocal();
+  sync.remoto = new Date(); sync.erro = null; renderSync();
+  if(!silencioso) toast(`${DADOS.length} demanda(s) carregada(s) do n8n`);
+}
 
 /* ---------- selects ---------- */
 function popular(){
@@ -718,26 +837,15 @@ function payloadWebhook(){
   };
 }
 
-/* POST no nó Webhook do n8n.
-   {r:"ok"}     — fluxo respondeu 2xx (exige Allowed Origins configurado no n8n)
-   {r:"opaco"}  — requisição saiu, resposta ilegível por CORS
-   {r:"erro"}   — não chegou */
-async function postWebhook(url, dados, token){
-  const body = JSON.stringify(dados);
-  const headers = {"Content-Type":"application/json"};
-  if(token) headers["Authorization"] = "Bearer " + token;
+/* Último recurso só para o resumo: text/plain não dispara preflight, então a
+   requisição sai mesmo sem CORS — mas a resposta é opaca e não há confirmação.
+   Não serve para carregar/salvar, que precisam ler o retorno. */
+async function tentarSemCors(url, corpo){
   try{
-    const res = await fetch(url, {method:"POST", headers, body});
-    return res.ok ? {r:"ok"} : {r:"erro", detalhe:`o fluxo respondeu ${res.status}`};
-  }catch(e){ /* CORS, offline, ou URL errada */ }
-  /* Com token não há fallback: cabeçalho customizado obriga preflight, que o
-     modo no-cors não faz. Melhor falhar claro do que enviar sem autenticação. */
-  if(token) return {r:"erro", detalhe:"CORS bloqueou — libere a origem no nó Webhook"};
-  try{
-    /* text/plain não dispara preflight: a requisição sai, mas a resposta é opaca */
-    await fetch(url, {method:"POST", mode:"no-cors", headers:{"Content-Type":"text/plain;charset=UTF-8"}, body});
-    return {r:"opaco"};
-  }catch(e){ return {r:"erro", detalhe:"webhook inalcançável"}; }
+    await fetch(url, {method:"POST", mode:"no-cors",
+      headers:{"Content-Type":"text/plain;charset=UTF-8"}, body: JSON.stringify(corpo)});
+    return true;
+  }catch(e){ return false; }
 }
 
 /* aviso opcional: quando vem do fallback do webhook, o motivo da falha precisa
@@ -754,11 +862,15 @@ async function enviarTeams(btn){
   const hook = cfg(LS_HOOK).trim();
   if(!hook){ abrirDeepLink(); return; }
   const rotulo = btn.textContent; btn.disabled = true; btn.textContent = "Enviando…";
-  const {r, detalhe} = await postWebhook(hook, payloadWebhook(), cfg(LS_TOKEN).trim());
+  const corpo = payloadWebhook();
+  const r = await chamarN8n("resumo", corpo);
+  /* com token não há fallback: cabeçalho customizado obriga preflight, que o
+     modo no-cors não faz. Melhor falhar claro do que enviar sem autenticação. */
+  const opaco = (!r.ok && !cfg(LS_TOKEN).trim()) ? await tentarSemCors(hook, {acao:"resumo", ...corpo}) : false;
   btn.disabled = false; btn.textContent = rotulo;
-  if(r === "ok")    return toast("Enviado ao n8n");
-  if(r === "opaco") return toast("Requisição enviada — entrega não confirmada", 4000);
-  abrirDeepLink(`n8n falhou: ${detalhe}. Abri o Teams como alternativa.`);
+  if(r.ok)  return toast("Enviado ao n8n");
+  if(opaco) return toast("Requisição enviada — entrega não confirmada", 4000);
+  abrirDeepLink(`n8n falhou: ${r.motivo}. Abri o Teams como alternativa.`);
 }
 
 /* ---------- copiar (com fallbacks para iframe / contexto restrito) ---------- */
@@ -851,14 +963,7 @@ $("#fileIn").onchange = e=>{
       const j = JSON.parse(r.result);
       const arr = Array.isArray(j) ? j : j.demandas;
       if(!Array.isArray(arr)) throw new Error("formato");
-      DADOS = arr.map(i=>({
-        id:i.id||"—", titulo:i.titulo||"", sprint:i.sprint||"", prioridade:PRIORIDADES.includes(i.prioridade)?i.prioridade:"Média",
-        esforco:+i.esforco||0, status:STATUSES.includes(i.status)?i.status:"Backlog",
-        inicio:i.inicio||"", previsto:i.previsto||"", entrega:i.entrega||"",
-        dor:DOR_ITENS.map((_,k)=>i.dor?.[k]?1:0), dod:DOD_ITENS.map((_,k)=>i.dod?.[k]?1:0),
-        bloqueado:!!i.bloqueado, motivo:i.motivo||"", farolManual:i.farolManual||"auto",
-        comentarios:Array.isArray(i.comentarios)?i.comentarios:[]
-      }));
+      DADOS = normalizar(arr);
       popular(); renderTudo(); toast(`${DADOS.length} demandas carregadas`);
     }catch(err){ toast("Não consegui ler esse arquivo JSON"); }
     e.target.value = "";
@@ -884,13 +989,13 @@ $("#btnResumo").onclick = ()=>{
         : "Abre o Teams com uma versão enxuta (só 🔴 e 🟡) já na caixa de mensagem — <b>você ainda precisa apertar Enter</b>. Para envio automático, configure o webhook do n8n abaixo."}</div>
 
       <details class="help" style="margin-top:16px">
-        <summary>Configurar envio</summary>
+        <summary>Configurar envio e sincronização</summary>
         <div class="fld" style="margin-top:10px">
           <span>E-mail do gestor — abre o chat certo já preenchido (modo deep link)</span>
           <input type="text" id="cfgGestor" placeholder="gestor@kard.com.br" value="${cfg(LS_GESTOR).replace(/"/g,"&quot;")}">
         </div>
         <div class="fld" style="margin-top:9px">
-          <span>Webhook de produção do n8n — envia sem abrir o Teams</span>
+          <span>Webhook de produção do n8n — guarda o backlog e envia o resumo</span>
           <input type="text" id="cfgHook" placeholder="https://seu-n8n/webhook/visao-time" value="${cfg(LS_HOOK).replace(/"/g,"&quot;")}">
         </div>
         <div class="fld" style="margin-top:9px">
@@ -904,7 +1009,10 @@ $("#btnResumo").onclick = ()=>{
           confirmação. Use a URL de <b>produção</b>: a de teste só responde
           enquanto o editor do n8n está escutando.
         </div>
-        <button id="cfgSalvar" style="margin-top:9px">Salvar configuração</button>
+        <div class="acoes">
+          <button id="cfgSalvar">Salvar configuração</button>
+          <button id="cfgRecarregar">Recarregar do n8n</button>
+        </div>
       </details>
     </div>`;
   $("#rep").value = txt;
@@ -917,6 +1025,12 @@ $("#btnResumo").onclick = ()=>{
     setCfg(LS_TOKEN, $("#cfgToken").value.trim());
     toast("Configuração salva neste navegador"); $("#btnResumo").onclick();
   };
+  $("#cfgRecarregar").onclick = async e => {
+    const b = e.currentTarget, rot = b.textContent;
+    b.disabled = true; b.textContent = "Buscando…";
+    await sincronizarDoServidor(false);
+    b.disabled = false; b.textContent = rot;
+  };
   selecionado = null; modoRelatorio();
   $("#drawer").classList.add("on"); $("#scrim").classList.add("on");
 };
@@ -927,7 +1041,16 @@ $("#btnTema").onclick = ()=>{
 if(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
   document.documentElement.setAttribute("data-theme","dark");
 
-popular(); renderTudo();
+/* Boot: pinta o que está no navegador primeiro (instantâneo, funciona offline)
+   e só então busca no n8n, que pode demorar ou falhar. */
+(async function boot(){
+  semPersistir = true;
+  carregarLocal();
+  popular(); renderTudo();
+  semPersistir = false;
+  renderSync();
+  await sincronizarDoServidor(true);
+})();
 </script>
 </body>
 </html>
