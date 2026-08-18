@@ -74,24 +74,56 @@ página web envie mensagem sozinha, e isso é proposital.
 Preenchendo o e-mail do gestor, o link já abre o chat correto. O texto vai na
 URL, por isso o resumo é encurtado: relatório longo corre risco de ser truncado.
 
-### 2. Webhook do canal (envio real)
+### 2. Webhook do n8n (envio real)
 
-Publica o resumo **completo** num canal, sem abrir o Teams. Requer criar um
-fluxo no Power Automate com o gatilho _"When a Teams webhook request is
-received"_ e colar a URL gerada.
+Faz `POST` no seu fluxo do n8n, que decide o que fazer — postar num canal,
+mandar no chat do gestor, gravar histórico, escalar o que está vermelho.
 
-> Os _Incoming Webhooks_ clássicos (Office 365 connectors) foram desativados
-> pela Microsoft em maio de 2026 — Power Automate é o caminho suportado hoje.
+> Os _Incoming Webhooks_ clássicos do Teams (Office 365 connectors) foram
+> desativados pela Microsoft em maio de 2026. Fazer o envio pelo n8n contorna
+> isso: o nó **Microsoft Teams** usa a API do Graph, não o connector antigo.
 
-Duas ressalvas:
+#### Montando o fluxo
 
-- **A URL do webhook é uma credencial.** Quem a tiver consegue postar no canal.
-  Ela fica só no seu navegador; nunca a coloque no `index.html` — este repo é
-  público.
-- O fluxo do Power Automate normalmente não devolve cabeçalhos CORS, então a
-  página cai num envio sem leitura de resposta. Nesse caso a mensagem aparece
-  como _"entrega não confirmada"_: a requisição saiu, mas o navegador não
-  consegue ler o resultado. Confira no canal na primeira vez.
+1. Nó **Webhook** — método `POST`. Copie a **URL de produção**.
+2. Em _Options_ do nó Webhook, preencha **Allowed Origins (CORS)** com a origem
+   desta página (ex.: `https://mohamadkdb.github.io`, ou `*` para testar).
+   Sem isso o navegador não lê a resposta e o painel não confirma a entrega.
+3. Nó **Microsoft Teams** → _Send message_, mapeando o texto do passo anterior.
+4. Ative o fluxo e cole a URL em _Configurar envio_ no painel.
+
+#### O que o painel envia
+
+```jsonc
+{
+  "geradoEm": "2026-08-18",
+  "texto":      "…relatório completo, agrupado por farol…",
+  "textoCurto": "…só 🔴 e 🟡, para mensagem curta…",
+  "contagem": { "vermelho": 1, "amarelo": 1, "verde": 1, "entregue": 0,
+                "ativas": 3, "total": 3, "pontosAbertos": 24 },
+  "demandas": [ { "id": "KRD-101", "titulo": "…", "status": "…",
+                  "farol": "vermelho", "motivosFarol": ["…"],
+                  "dorPct": 100, "dodPct": 0, "bloqueado": true,
+                  "motivoBloqueio": "…", "ultimoComentario": { } } ]
+}
+```
+
+O caminho mais curto é mandar `{{ $json.body.texto }}` direto ao nó do Teams.
+`demandas` está aí para quem quiser montar Adaptive Card, filtrar por farol ou
+abrir um item por demanda crítica.
+
+#### Duas ressalvas
+
+- **A URL do webhook é uma credencial.** Quem a tiver consegue disparar seu
+  fluxo. Ela fica só no seu navegador; nunca a coloque no `index.html` — este
+  repo é público. Para endurecer, ative _Header Auth_ no nó Webhook e preencha
+  o campo **Token** no painel (vai como `Authorization: Bearer`).
+- Se o CORS não estiver liberado, a página tenta um envio sem leitura de
+  resposta e avisa _"entrega não confirmada"_: a requisição saiu, mas o
+  resultado é ilegível. **Com Token preenchido esse fallback não existe** —
+  cabeçalho customizado exige preflight — e o erro é explícito, pedindo o CORS.
+- A **URL de teste** do n8n só responde enquanto o editor está escutando um
+  evento. Em uso normal, use sempre a de produção com o fluxo ativo.
 
 ## Exportações
 

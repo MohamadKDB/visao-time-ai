@@ -688,30 +688,65 @@ function resumoCurto(){
   return montar(corte);
 }
 
-/* ---------- envio para o Teams ---------- */
-const LS_GESTOR = "visaotime.gestor", LS_HOOK = "visaotime.webhook";
+/* ---------- envio para o Teams (via n8n) ---------- */
+const LS_GESTOR = "visaotime.gestor", LS_HOOK = "visaotime.webhook", LS_TOKEN = "visaotime.token";
 const cfg = k => { try{ return localStorage.getItem(k) || ""; }catch(e){ return ""; } };
 const setCfg = (k,v) => { try{ localStorage.setItem(k,v); }catch(e){} };
 
-/* Webhook do Power Automate ("When a Teams webhook request is received").
-   Retorna "ok" | "opaco" (enviado, entrega não confirmada) | "erro". */
-async function postWebhook(url, texto){
-  const body = JSON.stringify({text: texto});
-  try{
-    const res = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body});
-    return res.ok ? "ok" : "erro";
-  }catch(e){ /* provavelmente CORS — o fluxo não devolve Access-Control-Allow-Origin */ }
-  try{
-    /* text/plain não dispara preflight; a requisição sai, mas a resposta é opaca */
-    await fetch(url, {method:"POST", mode:"no-cors", headers:{"Content-Type":"text/plain;charset=UTF-8"}, body});
-    return "opaco";
-  }catch(e){ return "erro"; }
+/* Corpo enviado ao webhook do n8n. Vai texto pronto E dados estruturados:
+   assim o fluxo pode só repassar `texto` ao nó do Teams, ou montar um
+   Adaptive Card / rotear por farol a partir de `demandas`. */
+function payloadWebhook(){
+  const c = {vermelho:0, amarelo:0, verde:0, entregue:0};
+  DADOS.forEach(i=>c[farolFinal(i).nivel]++);
+  const ativas = DADOS.filter(i=>i.status!=="Concluído");
+  return {
+    geradoEm: hojeISO(),
+    texto: resumo(),
+    textoCurto: resumoCurto(),
+    contagem: {...c, ativas: ativas.length, total: DADOS.length,
+               pontosAbertos: ativas.reduce((s,i)=>s+(+i.esforco||0),0)},
+    demandas: DADOS.map(i=>{
+      const f = farolFinal(i);
+      const u = i.comentarios.length ? i.comentarios[i.comentarios.length-1] : null;
+      return {id:i.id, titulo:i.titulo, sprint:i.sprint, status:i.status, prioridade:i.prioridade,
+              esforco:i.esforco, previsto:i.previsto, entrega:i.entrega,
+              farol:f.nivel, farolRotulo:FAROIS[f.nivel].label, motivosFarol:f.motivos,
+              dorPct:f.dorP, dodPct:f.dodP, bloqueado:i.bloqueado, motivoBloqueio:i.motivo,
+              ultimoComentario: u ? {data:u.data, texto:u.texto} : null};
+    })
+  };
 }
 
-function abrirDeepLink(){
+/* POST no nó Webhook do n8n.
+   {r:"ok"}     — fluxo respondeu 2xx (exige Allowed Origins configurado no n8n)
+   {r:"opaco"}  — requisição saiu, resposta ilegível por CORS
+   {r:"erro"}   — não chegou */
+async function postWebhook(url, dados, token){
+  const body = JSON.stringify(dados);
+  const headers = {"Content-Type":"application/json"};
+  if(token) headers["Authorization"] = "Bearer " + token;
+  try{
+    const res = await fetch(url, {method:"POST", headers, body});
+    return res.ok ? {r:"ok"} : {r:"erro", detalhe:`o fluxo respondeu ${res.status}`};
+  }catch(e){ /* CORS, offline, ou URL errada */ }
+  /* Com token não há fallback: cabeçalho customizado obriga preflight, que o
+     modo no-cors não faz. Melhor falhar claro do que enviar sem autenticação. */
+  if(token) return {r:"erro", detalhe:"CORS bloqueou — libere a origem no nó Webhook"};
+  try{
+    /* text/plain não dispara preflight: a requisição sai, mas a resposta é opaca */
+    await fetch(url, {method:"POST", mode:"no-cors", headers:{"Content-Type":"text/plain;charset=UTF-8"}, body});
+    return {r:"opaco"};
+  }catch(e){ return {r:"erro", detalhe:"webhook inalcançável"}; }
+}
+
+/* aviso opcional: quando vem do fallback do webhook, o motivo da falha precisa
+   sobreviver — senão o toast daqui apaga o erro antes de alguém ler */
+function abrirDeepLink(aviso){
   const users = cfg(LS_GESTOR).trim();
   const url = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(users)}&message=${encodeURIComponent(resumoCurto())}`;
   window.open(url, "_blank", "noopener");
+  if(aviso) return toast(aviso, 6000);
   toast(users ? "Teams aberto — revise e aperte Enter" : "Teams aberto — escolha o destinatário e envie");
 }
 
@@ -719,11 +754,11 @@ async function enviarTeams(btn){
   const hook = cfg(LS_HOOK).trim();
   if(!hook){ abrirDeepLink(); return; }
   const rotulo = btn.textContent; btn.disabled = true; btn.textContent = "Enviando…";
-  const r = await postWebhook(hook, resumo());
+  const {r, detalhe} = await postWebhook(hook, payloadWebhook(), cfg(LS_TOKEN).trim());
   btn.disabled = false; btn.textContent = rotulo;
-  if(r === "ok")    return toast("Publicado no canal do Teams");
-  if(r === "opaco") return toast("Requisição enviada — entrega não confirmada");
-  toast("Webhook falhou — abrindo o Teams"); abrirDeepLink();
+  if(r === "ok")    return toast("Enviado ao n8n");
+  if(r === "opaco") return toast("Requisição enviada — entrega não confirmada", 4000);
+  abrirDeepLink(`n8n falhou: ${detalhe}. Abri o Teams como alternativa.`);
 }
 
 /* ---------- copiar (com fallbacks para iframe / contexto restrito) ---------- */
@@ -772,7 +807,14 @@ function csv(){
   });
   baixar(`backlog-${hojeISO()}.csv`, "﻿"+[head.map(esc).join(";"),...rows].join("\n"), "text/csv;charset=utf-8");
 }
-function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); setTimeout(()=>t.classList.remove("on"),1900); }
+/* o timer é guardado: sem isso um toast novo herda o setTimeout do anterior e
+   desaparece antes da hora — justo no caso de erro, que é o que precisa ser lido */
+let toastTimer = null;
+function toast(m, ms){
+  const t = $("#toast"); t.textContent = m; t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove("on"), ms || 1900);
+}
 
 function novaDemanda(){
   const nums = DADOS.map(i=>+(i.id.match(/(\d+)$/)?.[1]||0));
@@ -833,27 +875,34 @@ $("#btnResumo").onclick = ()=>{
       <div class="card-s" style="margin-bottom:10px">Texto gerado a partir do backlog atual.</div>
       <textarea class="report" id="rep" readonly spellcheck="false"></textarea>
       <div class="acoes">
-        <button class="primary" id="btnTeams">${temHook ? "Publicar no canal" : "Abrir no Teams"}</button>
+        <button class="primary" id="btnTeams">${temHook ? "Enviar pelo n8n" : "Abrir no Teams"}</button>
         <button id="btnCopiar">Copiar texto</button>
         <button id="btnBaixarTxt">Baixar .txt</button>
       </div>
       <div class="card-s" style="margin-top:8px">${temHook
-        ? "Publica o resumo completo no canal via webhook do Power Automate."
-        : "Abre o Teams com uma versão enxuta (só 🔴 e 🟡) já na caixa de mensagem — <b>você ainda precisa apertar Enter</b>. O Teams não permite que uma página envie sozinha."}</div>
+        ? "Faz POST no seu fluxo do n8n com o resumo e os dados do backlog — o fluxo decide onde postar."
+        : "Abre o Teams com uma versão enxuta (só 🔴 e 🟡) já na caixa de mensagem — <b>você ainda precisa apertar Enter</b>. Para envio automático, configure o webhook do n8n abaixo."}</div>
 
       <details class="help" style="margin-top:16px">
         <summary>Configurar envio</summary>
         <div class="fld" style="margin-top:10px">
-          <span>E-mail do gestor — abre o chat certo já preenchido</span>
+          <span>E-mail do gestor — abre o chat certo já preenchido (modo deep link)</span>
           <input type="text" id="cfgGestor" placeholder="gestor@kard.com.br" value="${cfg(LS_GESTOR).replace(/"/g,"&quot;")}">
         </div>
         <div class="fld" style="margin-top:9px">
-          <span>Webhook do canal (Power Automate) — opcional, publica sem abrir o Teams</span>
-          <input type="text" id="cfgHook" placeholder="https://….logic.azure.com/…" value="${cfg(LS_HOOK).replace(/"/g,"&quot;")}">
+          <span>Webhook de produção do n8n — envia sem abrir o Teams</span>
+          <input type="text" id="cfgHook" placeholder="https://seu-n8n/webhook/visao-time" value="${cfg(LS_HOOK).replace(/"/g,"&quot;")}">
+        </div>
+        <div class="fld" style="margin-top:9px">
+          <span>Token (opcional) — vai como <code>Authorization: Bearer</code>, casa com Header Auth no n8n</span>
+          <input type="text" id="cfgToken" placeholder="deixe vazio se o fluxo não exigir" value="${cfg(LS_TOKEN).replace(/"/g,"&quot;")}">
         </div>
         <div class="card-s" style="margin-top:7px">
           Guardado apenas neste navegador (localStorage) — não vai para o repositório.
-          O webhook é uma credencial: quem tiver a URL consegue postar no canal.
+          No nó Webhook do n8n, preencha <b>Allowed Origins (CORS)</b> com a origem
+          desta página, senão o navegador bloqueia a resposta e o envio fica sem
+          confirmação. Use a URL de <b>produção</b>: a de teste só responde
+          enquanto o editor do n8n está escutando.
         </div>
         <button id="cfgSalvar" style="margin-top:9px">Salvar configuração</button>
       </details>
@@ -865,6 +914,7 @@ $("#btnResumo").onclick = ()=>{
   $("#cfgSalvar").onclick = ()=>{
     setCfg(LS_GESTOR, $("#cfgGestor").value.trim());
     setCfg(LS_HOOK, $("#cfgHook").value.trim());
+    setCfg(LS_TOKEN, $("#cfgToken").value.trim());
     toast("Configuração salva neste navegador"); $("#btnResumo").onclick();
   };
   selecionado = null; modoRelatorio();
