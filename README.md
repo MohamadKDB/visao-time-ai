@@ -11,8 +11,8 @@ Basta abrir no navegador.
 1. Abra o `index.html` (duplo clique, ou pelo GitHub Pages — veja abaixo).
 2. Clique em qualquer linha da tabela para abrir o painel da demanda:
    checklists de D.O.R e D.O.D, bloqueio com motivo, datas, esforço e comentários.
-3. **Resumo p/ gestor** gera um texto pronto, agrupado por farol, para colar no
-   e-mail, Teams ou 1:1.
+3. **Resumo no Teams** gera um texto pronto, agrupado por farol — veja
+   [Envio para o Teams](#envio-para-o-teams).
 4. Ao terminar de editar, clique em **Salvar (.json)** e guarde o arquivo.
    Na próxima vez, use **Carregar** para continuar de onde parou.
 
@@ -58,6 +58,40 @@ Em ~1 minuto o painel fica disponível em:
 ```
 https://mohamadkdb.github.io/visao-time-ai/
 ```
+
+## Envio para o Teams
+
+O botão **Resumo no Teams** tem dois modos. Ambos são configurados em
+_Configurar envio_, dentro do próprio painel do resumo — os valores ficam no
+`localStorage` do navegador e **não** são versionados.
+
+### 1. Deep link (padrão, sem configuração)
+
+Abre o Teams com uma versão enxuta do resumo (só 🔴 e 🟡) já na caixa de
+mensagem. **Você ainda precisa apertar Enter** — o Teams não permite que uma
+página web envie mensagem sozinha, e isso é proposital.
+
+Preenchendo o e-mail do gestor, o link já abre o chat correto. O texto vai na
+URL, por isso o resumo é encurtado: relatório longo corre risco de ser truncado.
+
+### 2. Webhook do canal (envio real)
+
+Publica o resumo **completo** num canal, sem abrir o Teams. Requer criar um
+fluxo no Power Automate com o gatilho _"When a Teams webhook request is
+received"_ e colar a URL gerada.
+
+> Os _Incoming Webhooks_ clássicos (Office 365 connectors) foram desativados
+> pela Microsoft em maio de 2026 — Power Automate é o caminho suportado hoje.
+
+Duas ressalvas:
+
+- **A URL do webhook é uma credencial.** Quem a tiver consegue postar no canal.
+  Ela fica só no seu navegador; nunca a coloque no `index.html` — este repo é
+  público.
+- O fluxo do Power Automate normalmente não devolve cabeçalhos CORS, então a
+  página cai num envio sem leitura de resposta. Nesse caso a mensagem aparece
+  como _"entrega não confirmada"_: a requisição saiu, mas o navegador não
+  consegue ler o resultado. Confira no canal na primeira vez.
 
 ## Exportações
 
