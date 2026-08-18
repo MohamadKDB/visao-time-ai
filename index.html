@@ -298,49 +298,10 @@ const DOD_ITENS = [
 ];
 
 /* ============================================================
-   DADOS — exemplos para você substituir pelas demandas reais
+   DADOS — as demandas do time. Comece vazio e use "+ Nova demanda",
+   ou carregue um .json salvo anteriormente.
    ============================================================ */
-let DADOS = [
-  {id:"KRD-101", titulo:"Split de pagamento no checkout", sprint:"Sprint 36", prioridade:"Alta", esforco:8,
-   status:"Em Desenvolvimento", inicio:"2026-08-10", previsto:"2026-08-21", entrega:"",
-   dor:[1,1,1,1,1,1], dod:[0,0,0,0,0,0], bloqueado:false, motivo:"", farolManual:"auto",
-   comentarios:[{data:"2026-08-17", texto:"Backend concluído, front em integração. Segue no prazo."}]},
-
-  {id:"KRD-102", titulo:"Antifraude — regra de velocidade por cartão", sprint:"Sprint 36", prioridade:"Alta", esforco:13,
-   status:"Em Desenvolvimento", inicio:"2026-08-06", previsto:"2026-08-14", entrega:"",
-   dor:[1,1,1,0,1,1], dod:[0,0,0,0,0,0], bloqueado:true, motivo:"Aguardando liberação de acesso à base de transações pelo time de Dados", farolManual:"auto",
-   comentarios:[{data:"2026-08-14",texto:"Bloqueada desde 12/08 por acesso à base. Já escalado para o time de Dados."}]},
-
-  {id:"KRD-103", titulo:"Relatório de conciliação mensal (export XLSX)", sprint:"Sprint 36", prioridade:"Média", esforco:5,
-   status:"Em Teste / QA", inicio:"2026-08-11", previsto:"2026-08-19", entrega:"",
-   dor:[1,1,1,1,1,1], dod:[1,1,0,0,0,0], bloqueado:false, motivo:"", farolManual:"auto",
-   comentarios:[{data:"2026-08-18",texto:"Em QA. Prazo aperta esta semana — atenção."}]},
-
-  {id:"KRD-104", titulo:"Onboarding: validação de documento por selfie", sprint:"Sprint 37", prioridade:"Alta", esforco:13,
-   status:"Pronto para Dev", inicio:"", previsto:"2026-09-04", entrega:"",
-   dor:[1,1,0,1,0,1], dod:[0,0,0,0,0,0], bloqueado:false, motivo:"", farolManual:"auto",
-   comentarios:[{data:"2026-08-15",texto:"Falta validar regra com Compliance e receber o protótipo do design."}]},
-
-  {id:"KRD-105", titulo:"Notificação push de fatura fechada", sprint:"Sprint 37", prioridade:"Média", esforco:3,
-   status:"Refinamento", inicio:"", previsto:"2026-09-11", entrega:"",
-   dor:[1,0,0,0,0,0], dod:[0,0,0,0,0,0], bloqueado:false, motivo:"", farolManual:"auto",
-   comentarios:[]},
-
-  {id:"KRD-106", titulo:"Migração da API de emissão para v2", sprint:"Sprint 38", prioridade:"Baixa", esforco:21,
-   status:"Backlog", inicio:"", previsto:"", entrega:"",
-   dor:[1,0,0,0,0,0], dod:[0,0,0,0,0,0], bloqueado:false, motivo:"", farolManual:"auto",
-   comentarios:[{data:"2026-08-12",texto:"Sem data ainda — depende do encerramento do split."}]},
-
-  {id:"KRD-099", titulo:"Bloqueio temporário de cartão pelo app", sprint:"Sprint 35", prioridade:"Alta", esforco:8,
-   status:"Concluído", inicio:"2026-07-28", previsto:"2026-08-07", entrega:"2026-08-06",
-   dor:[1,1,1,1,1,1], dod:[1,1,1,1,1,1], bloqueado:false, motivo:"", farolManual:"auto",
-   comentarios:[{data:"2026-08-06",texto:"Entregue 1 dia antes do previsto. Sem incidentes em produção."}]},
-
-  {id:"KRD-100", titulo:"Ajuste de limite dinâmico (fase 1)", sprint:"Sprint 35", prioridade:"Média", esforco:5,
-   status:"Concluído", inicio:"2026-07-30", previsto:"2026-08-11", entrega:"2026-08-13",
-   dor:[1,1,1,1,1,1], dod:[1,1,1,0,1,1], bloqueado:false, motivo:"", farolManual:"auto",
-   comentarios:[{data:"2026-08-13",texto:"Entregue com 2 dias de atraso; documentação ainda pendente."}]}
-];
+let DADOS = [];
 
 /* ============================================================
    LÓGICA
@@ -485,7 +446,7 @@ function renderCharts(){
       <div class="hbar-lbl" title="${x.s}">${x.s}</div>
       <div class="hbar-track"><div class="hbar-fill" style="width:${100*x.n/max}%"></div></div>
       <div class="hbar-val">${x.n}</div>
-    </div>`).join("") + `<div class="legend"><span>Total de ${DADOS.length} demandas · maior fila: ${cont.slice().sort((a,b)=>b.n-a.n)[0].s}</span></div>`;
+    </div>`).join("") + `<div class="legend"><span>Total de ${DADOS.length} demandas${DADOS.length?` · maior fila: ${cont.slice().sort((a,b)=>b.n-a.n)[0].s}`:""}</span></div>`;
 
   const sprints = [...new Set(DADOS.map(i=>i.sprint))].sort();
   const cores = {vermelho:"var(--critical)",amarelo:"var(--warning)",verde:"var(--good)",entregue:"var(--series-1)"};
@@ -520,6 +481,9 @@ function renderTabela(){
     </tr>`;
   }).join("");
   $("#vazio").hidden = lista.length > 0;
+  $("#vazio").textContent = DADOS.length
+    ? "Nenhuma demanda com esses filtros."
+    : "Nenhuma demanda ainda. Clique em “+ Nova demanda” para começar, ou em “Carregar” para abrir um .json salvo.";
   $("#contador").textContent = `${lista.length} de ${DADOS.length} demandas`;
   $("#subtitulo").textContent = `Atualizado em ${fmt(hojeISO())} · D.O.R, Status, D.O.D e farol de risco`;
   tb.querySelectorAll("tr").forEach(tr=>tr.onclick=()=>abrir(tr.dataset.id));

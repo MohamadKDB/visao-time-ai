@@ -44,7 +44,7 @@ const STATUSES   = [...]   // etapas do fluxo
 const PRIORIDADES = [...]
 const DOR_ITENS  = [...]   // checklist de Definition of Ready
 const DOD_ITENS  = [...]   // checklist de Definition of Done
-let   DADOS      = [...]   // demandas (os exemplos vêm daqui)
+let   DADOS      = []      // demandas (começa vazio)
 ```
 
 Editar essas listas é suficiente para adequar ao processo — o resto do painel se
