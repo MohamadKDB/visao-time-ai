@@ -125,20 +125,24 @@ credenciais. Ele atende três ações, distinguidas pelo campo `acao` do corpo:
 
 1. Importe [`n8n/visao-time.json`](n8n/visao-time.json). O nó _Leia primeiro_
    traz estas instruções e o SQL da tabela.
-2. Crie a tabela no seu Postgres. O nó Postgres serve tanto um banco próprio
-   quanto o **Supabase** — basta usar a connection string do projeto.
+2. Rode [`n8n/schema.sql`](n8n/schema.sql) no banco apontado pela credencial
+   Postgres do n8n. Serve tanto um banco próprio quanto o **Supabase** (SQL
+   Editor). O essencial é:
 
    ```sql
-   create table if not exists visao_time_backlog (
+   create table if not exists public.visao_time_backlog (
      id             text primary key default 'atual',
-     demandas       jsonb not null default '[]'::jsonb,
+     demandas       jsonb       not null default '[]'::jsonb,
      atualizado_em  timestamptz not null default now(),
      atualizado_por text
    );
    ```
 
    É uma linha só (`id = 'atual'`) com o backlog inteiro em `jsonb`. Simples de
-   propósito: o painel manda o estado completo, não diffs.
+   propósito: o painel manda o estado completo, não diffs. O arquivo traz ainda
+   uma tabela de histórico opcional e, para quem usa Supabase, o `enable row
+   level security` que fecha a API pública — o painel fala com o n8n, não com o
+   Supabase, então ninguém precisa de acesso via anon key.
 3. No nó **Webhook** → _Options_ → **Allowed Origins (CORS)**, troque `*` pela
    origem do painel (ex.: `https://mohamadkdb.github.io`). Sem isso o navegador
    não lê a resposta e o `carregar` não funciona.
