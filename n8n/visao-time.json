@@ -214,6 +214,21 @@
     },
     {
       "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Rode ESTE nó (Execute step) para ver o que a credencial do n8n alcança.\n-- Rodar no DBeaver não serve: lá a conexão é outra.\nselect current_database()                          as banco,\n       current_user                                as usuario,\n       current_schemas(true)                       as search_path,\n       to_regclass('public.visao_time_backlog')    as achou_tabela,\n       inet_server_addr()                          as servidor;",
+        "options": {}
+      },
+      "id": "pg-diagnostico",
+      "name": "Diagnóstico — onde estou conectado?",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [160, 560],
+      "disabled": true,
+      "notesInFlow": true,
+      "notes": "Nó solto de propósito. Se `banco` ou `servidor` divergir de onde você criou a tabela, a credencial aponta para outro lugar."
+    },
+    {
+      "parameters": {
         "respondWith": "json",
         "responseCode": 400,
         "responseBody": "={{ { \"ok\": false, \"erro\": \"acao desconhecida\", \"recebido\": $json.body.acao || null, \"aceitas\": [\"carregar\", \"salvar\", \"resumo\"] } }}",

@@ -152,13 +152,20 @@ credenciais. Ele atende três ações, distinguidas pelo campo `acao` do corpo:
 
 #### `relation "visao_time_backlog" does not exist`, com a tabela criada
 
-A tabela existe, mas não onde a credencial do n8n está olhando. Rode isto num
-nó Postgres do próprio fluxo — é o diagnóstico mais rápido:
+A tabela existe, mas não no banco que a credencial do n8n alcança. O fluxo traz
+o nó **Diagnóstico — onde estou conectado?** (desativado, solto) pronto para
+isso: abra e clique em _Execute step_.
 
 ```sql
 select current_database(), current_user, current_schemas(true),
        to_regclass('public.visao_time_backlog') as achou;
 ```
+
+**Rode dentro do n8n, não no cliente SQL** — a pergunta é o que a credencial do
+n8n vê, e o DBeaver/psql usa outra conexão. Foi assim que este caso apareceu: o
+cliente estava no banco `automation`, onde a tabela havia sido criada, e a
+credencial do n8n apontava para outro banco da mesma instância RDS. Conexão
+válida, `search_path` correto, tabela invisível.
 
 - `current_database()` diferente do banco onde você criou a tabela → a
   credencial aponta para outro banco do mesmo servidor. É a causa mais comum:
