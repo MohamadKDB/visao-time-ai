@@ -10,7 +10,7 @@ backlog com o time, aponte-o para um fluxo do n8n
 
 ## Como usar
 
-1. Abra o `index.html` (duplo clique, ou pelo GitHub Pages — veja abaixo).
+1. Acesse <https://visao-time-ai.vercel.app> (ou abra o `index.html` local).
 2. Clique em qualquer linha da tabela para abrir o painel da demanda:
    checklists de D.O.R e D.O.D, bloqueio com motivo, datas, esforço e comentários.
 3. **Resumo no Teams** gera um texto pronto, agrupado por farol — veja
@@ -78,14 +78,18 @@ let   DADOS      = []      // demandas (começa vazio)
 Editar essas listas é suficiente para adequar ao processo — o resto do painel se
 ajusta sozinho (gráficos, filtros, percentuais e farol).
 
-## Publicando para o time (GitHub Pages)
+## Publicando para o time
 
-Settings → Pages → Source: `Deploy from a branch` → branch `main`, pasta `/ (root)`.
-Em ~1 minuto o painel fica disponível em:
+No ar pela Vercel, com deploy automático a cada push na `main`:
 
 ```
-https://mohamadkdb.github.io/visao-time-ai/
+https://visao-time-ai.vercel.app
 ```
+
+Essa URL é também a **origem** que precisa entrar em _Allowed Origins_ no nó
+Webhook do n8n. Se você trocar o domínio (ou usar um preview deploy, que ganha
+URL própria a cada branch), o CORS precisa acompanhar — senão o `carregar`
+para de funcionar sem erro aparente no painel, só o aviso no indicador.
 
 ## Envio para o Teams
 
@@ -143,9 +147,9 @@ credenciais. Ele atende três ações, distinguidas pelo campo `acao` do corpo:
    uma tabela de histórico opcional e, para quem usa Supabase, o `enable row
    level security` que fecha a API pública — o painel fala com o n8n, não com o
    Supabase, então ninguém precisa de acesso via anon key.
-3. No nó **Webhook** → _Options_ → **Allowed Origins (CORS)**, troque `*` pela
-   origem do painel (ex.: `https://mohamadkdb.github.io`). Sem isso o navegador
-   não lê a resposta e o `carregar` não funciona.
+3. No nó **Webhook** → _Options_ → **Allowed Origins (CORS)**, troque `*` por
+   `https://visao-time-ai.vercel.app`. Sem isso o navegador não lê a resposta e
+   o `carregar` não funciona.
 4. No nó **Microsoft Teams**, preencha Team e Channel (estão como `SUBSTITUA`).
 5. Ative o fluxo, copie a **URL de produção** e cole em _Configurar envio e
    sincronização_ no painel.
