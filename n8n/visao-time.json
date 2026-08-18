@@ -121,7 +121,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select demandas, atualizado_em, atualizado_por\n  from visao_time_backlog\n where id = 'atual'\n limit 1;",
+        "query": "select demandas, atualizado_em, atualizado_por\n  from public.visao_time_backlog\n where id = 'atual'\n limit 1;",
         "options": {}
       },
       "id": "pg-carregar",
@@ -157,7 +157,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "insert into visao_time_backlog (id, demandas, atualizado_em, atualizado_por)\nvalues ('atual', $1::jsonb, now(), $2)\non conflict (id) do update\n   set demandas       = excluded.demandas,\n       atualizado_em  = now(),\n       atualizado_por = excluded.atualizado_por\nreturning atualizado_em;",
+        "query": "insert into public.visao_time_backlog (id, demandas, atualizado_em, atualizado_por)\nvalues ('atual', $1::jsonb, now(), $2)\non conflict (id) do update\n   set demandas       = excluded.demandas,\n       atualizado_em  = now(),\n       atualizado_por = excluded.atualizado_por\nreturning atualizado_em;",
         "options": {
           "queryReplacement": "={{ [JSON.stringify($json.body.demandas || []), $json.body.autor || 'painel'] }}"
         }

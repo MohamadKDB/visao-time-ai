@@ -150,6 +150,23 @@ credenciais. Ele atende três ações, distinguidas pelo campo `acao` do corpo:
 5. Ative o fluxo, copie a **URL de produção** e cole em _Configurar envio e
    sincronização_ no painel.
 
+#### `relation "visao_time_backlog" does not exist`, com a tabela criada
+
+A tabela existe, mas não onde a credencial do n8n está olhando. Rode isto num
+nó Postgres do próprio fluxo — é o diagnóstico mais rápido:
+
+```sql
+select current_database(), current_user, current_schemas(true),
+       to_regclass('public.visao_time_backlog') as achou;
+```
+
+- `current_database()` diferente do banco onde você criou a tabela → a
+  credencial aponta para outro banco do mesmo servidor. É a causa mais comum:
+  o cliente SQL e o n8n estão em bancos distintos da mesma instância RDS.
+- `achou` nulo mas o banco certo → a tabela ficou em outro schema.
+- `achou` preenchido e ainda assim a query falha → `search_path` sem `public`.
+  As queries do fluxo já vêm qualificadas com `public.` justamente por isso.
+
 Dois detalhes que quebram o fluxo silenciosamente se passarem batido:
 
 - O nó Postgres de leitura precisa de **Always Output Data** ligado (já vem
