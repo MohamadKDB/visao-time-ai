@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backlog · Farol de Demandas</title>
+<style>
+  :root{
+    color-scheme: light;
+    --page:#f9f9f7; --surface:#ffffff; --surface-2:#fcfcfb;
+    --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+    --shadow:0 1px 2px rgba(11,11,11,.05), 0 8px 24px rgba(11,11,11,.06);
+    --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+    --good-ink:#046004; --warning-ink:#7a5300; --critical-ink:#9c2020; --done-ink:#184f95;
+    --good-bg:#e9f7e9; --warning-bg:#fdf3dd; --critical-bg:#fbe8e8; --done-bg:#e8f1fc;
+    --series-1:#2a78d6; --series-1-soft:#cde2fb;
+    --radius:12px;
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --surface-2:#202020;
+    --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.12);
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.45);
+    --good-ink:#7ede7e; --warning-ink:#fad27a; --critical-ink:#f09c9c; --done-ink:#9ec5f4;
+    --good-bg:#122a12; --warning-bg:#312a12; --critical-bg:#2f1717; --done-bg:#14243a;
+    --series-1:#3987e5; --series-1-soft:#184f95;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--page); color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1440px;margin:0 auto;padding:20px 20px 64px}
+
+  /* ---------- header ---------- */
+  header.top{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
+  h1{font-size:20px;margin:0;letter-spacing:-.01em}
+  .sub{color:var(--ink-2);font-size:13px;margin-top:2px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px}
+  button,select,input[type=text],input[type=date],input[type=number],textarea{
+    font:inherit;color:var(--ink);background:var(--surface);
+    border:1px solid var(--ring);border-radius:8px;padding:7px 10px;
+  }
+  button{cursor:pointer;transition:background .12s,border-color .12s}
+  button:hover{background:var(--surface-2);border-color:var(--axis)}
+  button.primary{background:var(--series-1);border-color:transparent;color:#fff;font-weight:600}
+  button.primary:hover{filter:brightness(.94);background:var(--series-1)}
+  button.ghost{background:transparent}
+  button.danger{color:var(--critical-ink)}
+  .icon-btn{padding:7px 9px}
+
+  /* ---------- cards ---------- */
+  .card{background:var(--surface);border:1px solid var(--ring);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .card-h{padding:14px 16px 0}
+  .card-t{font-size:13px;font-weight:650;letter-spacing:.01em}
+  .card-s{font-size:12px;color:var(--muted);margin-top:1px}
+
+  /* ---------- KPI ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px}
+  .kpi{padding:13px 15px 14px}
+  .kpi .lbl{font-size:11.5px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:6px}
+  .kpi .val{font-size:30px;font-weight:600;line-height:1.15;margin-top:5px}
+  .kpi .foot{font-size:12px;color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .dot.verde{background:var(--good)} .dot.amarelo{background:var(--warning)}
+  .dot.vermelho{background:var(--critical)} .dot.entregue{background:var(--series-1)}
+
+  /* ---------- charts ---------- */
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+  @media(max-width:900px){.charts{grid-template-columns:1fr}}
+  .chart-body{padding:12px 16px 16px}
+  .hbar-row{display:grid;grid-template-columns:132px 1fr 34px;align-items:center;gap:10px;margin-bottom:7px}
+  .hbar-lbl{font-size:12px;color:var(--ink-2);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hbar-track{background:var(--grid);height:14px;border-radius:4px;overflow:hidden}
+  .hbar-fill{height:14px;background:var(--series-1);border-radius:0 4px 4px 0;transition:width .3s}
+  .hbar-val{font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+  .stack-row{margin-bottom:11px}
+  .stack-top{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-2);margin-bottom:4px}
+  .stack{display:flex;height:16px;border-radius:4px;overflow:hidden;background:var(--grid);gap:2px}
+  .stack i{display:block;height:16px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;padding-top:11px;border-top:1px solid var(--grid);font-size:12px;color:var(--ink-2)}
+  .legend span{display:flex;align-items:center;gap:6px}
+
+  /* ---------- filters ---------- */
+  .filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
+  .filters label{font-size:12px;color:var(--muted);margin-right:-4px}
+  #busca{min-width:190px}
+
+  /* ---------- table ---------- */
+  .table-wrap{overflow-x:auto;border-radius:var(--radius)}
+  table{width:100%;border-collapse:separate;border-spacing:0;background:var(--surface);font-size:13px}
+  th{
+    text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+    font-weight:650;padding:10px 10px;border-bottom:1px solid var(--axis);white-space:nowrap;
+    position:sticky;top:0;background:var(--surface);z-index:2;cursor:pointer;user-select:none;
+  }
+  th.nosort{cursor:default}
+  th .arrow{color:var(--series-1)}
+  td{padding:9px 10px;border-bottom:1px solid var(--grid);vertical-align:middle}
+  tbody tr{cursor:pointer}
+  tbody tr:hover td{background:var(--surface-2)}
+  tbody tr.sel td{background:var(--series-1-soft)}
+  .id{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px;white-space:nowrap}
+  .tit{font-weight:550;max-width:330px}
+  .tit .blk{color:var(--critical-ink);font-size:11.5px;font-weight:600;display:block}
+  .nowrap{white-space:nowrap}
+  .num{font-variant-numeric:tabular-nums;text-align:right}
+
+  .pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;white-space:nowrap;border:1px solid transparent}
+  .pill.verde{background:var(--good-bg);color:var(--good-ink);border-color:var(--good)}
+  .pill.amarelo{background:var(--warning-bg);color:var(--warning-ink);border-color:var(--warning)}
+  .pill.vermelho{background:var(--critical-bg);color:var(--critical-ink);border-color:var(--critical)}
+  .pill.entregue{background:var(--done-bg);color:var(--done-ink);border-color:var(--series-1)}
+  .pill.neutro{background:var(--surface-2);color:var(--ink-2);border-color:var(--ring)}
+  .pri{font-size:11.5px;font-weight:600}
+  .pri.Alta{color:var(--critical-ink)} .pri.Média{color:var(--warning-ink)} .pri.Baixa{color:var(--ink-2)}
+
+  .mini{display:flex;align-items:center;gap:7px;min-width:96px}
+  .mini-track{flex:1;height:6px;background:var(--grid);border-radius:3px;overflow:hidden}
+  .mini-fill{height:6px;border-radius:0 3px 3px 0}
+  .mini-txt{font-size:11.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .cmt{max-width:250px;color:var(--ink-2);font-size:12.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .empty{padding:34px;text-align:center;color:var(--muted);background:var(--surface)}
+
+  /* ---------- drawer ---------- */
+  .scrim{position:fixed;inset:0;background:rgba(11,11,11,.42);opacity:0;pointer-events:none;transition:opacity .18s;z-index:40}
+  .scrim.on{opacity:1;pointer-events:auto}
+  .drawer{
+    position:fixed;top:0;right:0;height:100%;width:min(560px,100%);background:var(--surface);
+    border-left:1px solid var(--ring);box-shadow:-8px 0 40px rgba(11,11,11,.18);
+    transform:translateX(100%);transition:transform .22s ease;z-index:41;display:flex;flex-direction:column;
+  }
+  .drawer.on{transform:translateX(0)}
+  .drawer-h{padding:16px 18px;border-bottom:1px solid var(--grid);display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+  .drawer-b{padding:16px 18px 30px;overflow-y:auto;flex:1}
+  .drawer-f{padding:12px 18px;border-top:1px solid var(--grid);display:flex;gap:8px;justify-content:space-between;background:var(--surface-2)}
+  .sec{margin-bottom:20px}
+  .sec-t{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:650;margin-bottom:9px;display:flex;justify-content:space-between;align-items:center}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .fld{display:flex;flex-direction:column;gap:4px}
+  .fld > span{font-size:12px;color:var(--ink-2)}
+  .fld input,.fld select,.fld textarea{width:100%}
+  textarea{min-height:70px;resize:vertical;line-height:1.45}
+  .chk{display:flex;gap:9px;align-items:flex-start;padding:7px 9px;border:1px solid var(--grid);border-radius:8px;margin-bottom:6px;cursor:pointer}
+  .chk:hover{background:var(--surface-2)}
+  .chk input{margin:2px 0 0;width:16px;height:16px;accent-color:var(--series-1);flex:0 0 auto}
+  .chk.done{background:var(--good-bg);border-color:var(--good)}
+  :root[data-theme="dark"] .chk.done{border-color:var(--good)}
+  .chk span{font-size:13px}
+  .why{background:var(--surface-2);border:1px solid var(--ring);border-radius:10px;padding:11px 13px;font-size:12.5px;color:var(--ink-2)}
+  .why ul{margin:6px 0 0;padding-left:18px} .why li{margin-bottom:3px}
+  .hist{border-left:2px solid var(--grid);padding-left:11px;margin-bottom:9px}
+  .hist b{font-size:11.5px;color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
+  .hist p{margin:2px 0 0;font-size:13px;white-space:pre-wrap}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,20px);background:var(--ink);color:var(--page);
+    padding:10px 16px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:60}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  .report{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.5;
+    background:var(--surface-2);border:1px solid var(--ring);border-radius:10px;padding:14px;
+    width:100%;height:360px;resize:vertical;overflow:auto;color:var(--ink)}
+  .report:focus{outline:2px solid var(--series-1);outline-offset:1px}
+  details.help{margin-top:16px;font-size:13px;color:var(--ink-2)}
+  details.help summary{cursor:pointer;font-weight:600;color:var(--ink)}
+  details.help li{margin-bottom:4px}
+
+  @media print{
+    body{background:#fff}
+    .toolbar,.filters,.scrim,.drawer,.toast,details.help,#btnNova{display:none!important}
+    .card{box-shadow:none;break-inside:avoid}
+    .wrap{max-width:none;padding:0}
+    th{position:static}
+    tbody tr{page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Backlog · Farol de Demandas</h1>
+      <div class="sub" id="subtitulo">Acompanhamento de D.O.R, Status e D.O.D</div>
+    </div>
+    <div class="toolbar">
+      <button id="btnNova" class="primary">+ Nova demanda</button>
+      <button id="btnResumo">Resumo p/ gestor</button>
+      <button id="btnSalvar">Salvar (.json)</button>
+      <button id="btnCarregar">Carregar</button>
+      <input type="file" id="fileIn" accept=".json" hidden>
+      <button id="btnCsv">CSV</button>
+      <button id="btnPrint">Imprimir</button>
+      <button id="btnTema" class="icon-btn" title="Alternar tema">◐</button>
+    </div>
+  </header>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="charts">
+    <div class="card">
+      <div class="card-h"><div class="card-t">Demandas por status</div><div class="card-s">Onde o backlog está parado hoje</div></div>
+      <div class="chart-body" id="chartStatus"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><div class="card-t">Farol por sprint</div><div class="card-s">Onde está o risco</div></div>
+      <div class="chart-body" id="chartSprint"></div>
+    </div>
+  </section>
+
+  <section class="filters">
+    <input type="text" id="busca" placeholder="Buscar demanda…">
+    <label>Sprint</label><select id="fSprint"></select>
+    <label>Status</label><select id="fStatus"></select>
+    <label>Prioridade</label><select id="fPri"></select>
+    <label>Farol</label><select id="fFarol"></select>
+    <button class="ghost" id="btnLimpar">Limpar</button>
+    <span style="flex:1"></span>
+    <span class="card-s" id="contador"></span>
+  </section>
+
+  <section class="card table-wrap">
+    <table id="tabela">
+      <thead><tr>
+        <th data-sort="id">ID</th>
+        <th data-sort="titulo">Demanda</th>
+        <th data-sort="sprint">Sprint</th>
+        <th data-sort="prioridade">Prior.</th>
+        <th data-sort="esforco" class="num">Esf.</th>
+        <th data-sort="status">Status</th>
+        <th data-sort="dor">D.O.R</th>
+        <th data-sort="dod">D.O.D</th>
+        <th data-sort="previsto">Previsto</th>
+        <th data-sort="farol">Farol</th>
+        <th class="nosort">Comentário</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="vazio" hidden>Nenhuma demanda com esses filtros.</div>
+  </section>
+
+  <details class="help">
+    <summary>Como o farol é calculado e como usar este painel</summary>
+    <div style="margin-top:10px">
+      <p><b>🔴 Vermelho</b> — bloqueada, ou prazo previsto já estourado, ou está em desenvolvimento sem o D.O.R fechado (entrou sem estar pronta).</p>
+      <p><b>🟡 Amarelo</b> — prazo em até 3 dias, ou D.O.R incompleto já em "Pronto para Dev", ou marcada como concluída sem o D.O.D 100%, ou sem data prevista.</p>
+      <p><b>🟢 Verde</b> — no prazo, sem bloqueio, checklist coerente com o estágio.</p>
+      <p><b>🔵 Entregue</b> — status Concluído com D.O.D 100%.</p>
+      <p>Você pode sobrescrever o farol manualmente no painel da demanda (campo <i>Farol</i>) quando o cálculo não refletir a realidade — o motivo fica registrado.</p>
+      <p><b>Importante sobre os dados:</b> esta página não guarda nada sozinha. Depois de editar, clique em <b>Salvar (.json)</b> para baixar o arquivo, e em <b>Carregar</b> na próxima vez para continuar de onde parou. Guarde esse .json numa pasta ou no drive do time.</p>
+    </div>
+  </details>
+</div>
+
+<div class="scrim" id="scrim"></div>
+
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-h">
+    <div>
+      <div class="id" id="dId"></div>
+      <div style="font-weight:650;font-size:15px" id="dTit">—</div>
+    </div>
+    <button class="ghost icon-btn" id="dFechar" title="Fechar">✕</button>
+  </div>
+  <div class="drawer-b" id="drawerBody"></div>
+  <div class="drawer-f">
+    <button class="danger ghost" id="dExcluir">Excluir</button>
+    <button class="primary" id="dFechar2">Concluir edição</button>
+  </div>
+</aside>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   CONFIGURAÇÃO — ajuste as listas abaixo ao processo do time
+   ============================================================ */
+const STATUSES = ["Backlog","Refinamento","Pronto para Dev","Em Desenvolvimento","Em Teste / QA","Homologação","Concluído"];
+const PRIORIDADES = ["Alta","Média","Baixa"];
+
+const DOR_ITENS = [
+  "Objetivo e valor de negócio claros",
+  "Critérios de aceite escritos",
+  "Regras de negócio validadas com o solicitante",
+  "Dependências e integrações mapeadas",
+  "Design / protótipo disponível (se aplicável)",
+  "Esforço estimado pelo time"
+];
+const DOD_ITENS = [
+  "Code review aprovado",
+  "Testes automatizados / QA aprovados",
+  "Critérios de aceite validados",
+  "Documentação atualizada",
+  "Homologado pelo solicitante",
+  "Em produção e monitorado"
+];
+
+/* ============================================================
+   DADOS — exemplos para você substituir pelas demandas reais
+   ============================================================ */
+let DADOS = [
+  {id:"KRD-101", titulo:"Split de pagamento no checkout", sprint:"Sprint 36", prioridade:"Alta", esforco:8,
+   status:"Em Desenvolvimento", inicio:"2026-08-10", previsto:"2026-08-21", entrega:"",
+   dor:[1,1,1,1,1,1], dod:[0,0,0,0,0,0], bloqueado:false, motivo:"", farolManual:"auto",
+   comentarios:[{data:"2026-08-17", texto:"Backend concluído, front em integração. Segue no prazo."}]},
+
+  {id:"KRD-102", titulo:"Antifraude — regra de velocidade por cartão", sprint:"Sprint 36", prioridade:"Alta", esforco:13,
+   status:"Em Desenvolvimento", inicio:"2026-08-06", previsto:"2026-08-14", entrega:"",
+   dor:[1,1,1,0,1,1], dod:[0,0,0,0,0,0], bloqueado:true, motivo:"Aguardando liberação de acesso à base de transações pelo time de Dados", farolManual:"auto",
+   comentarios:[{data:"2026-08-14",texto:"Bloqueada desde 12/08 por acesso à base. Já escalado para o time de Dados."}]},
+
+  {id:"KRD-103", titulo:"Relatório de conciliação mensal (export XLSX)", sprint:"Sprint 36", prioridade:"Média", esforco:5,
+   status:"Em Teste / QA", inicio:"2026-08-11", previsto:"2026-08-19", entrega:"",
+   dor:[1,1,1,1,1,1], dod:[1,1,0,0,0,0], bloqueado:false, motivo:"", farolManual:"auto",
+   comentarios:[{data:"2026-08-18",texto:"Em QA. Prazo aperta esta semana — atenção."}]},
+
+  {id:"KRD-104", titulo:"Onboarding: validação de documento por selfie", sprint:"Sprint 37", prioridade:"Alta", esforco:13,
+   status:"Pronto para Dev", inicio:"", previsto:"2026-09-04", entrega:"",
+   dor:[1,1,0,1,0,1], dod:[0,0,0,0,0,0], bloqueado:false, motivo:"", farolManual:"auto",
+   comentarios:[{data:"2026-08-15",texto:"Falta validar regra com Compliance e receber o protótipo do design."}]},
+
+  {id:"KRD-105", titulo:"Notificação push de fatura fechada", sprint:"Sprint 37", prioridade:"Média", esforco:3,
+   status:"Refinamento", inicio:"", previsto:"2026-09-11", entrega:"",
+   dor:[1,0,0,0,0,0], dod:[0,0,0,0,0,0], bloqueado:false, motivo:"", farolManual:"auto",
+   comentarios:[]},
+
+  {id:"KRD-106", titulo:"Migração da API de emissão para v2", sprint:"Sprint 38", prioridade:"Baixa", esforco:21,
+   status:"Backlog", inicio:"", previsto:"", entrega:"",
+   dor:[1,0,0,0,0,0], dod:[0,0,0,0,0,0], bloqueado:false, motivo:"", farolManual:"auto",
+   comentarios:[{data:"2026-08-12",texto:"Sem data ainda — depende do encerramento do split."}]},
+
+  {id:"KRD-099", titulo:"Bloqueio temporário de cartão pelo app", sprint:"Sprint 35", prioridade:"Alta", esforco:8,
+   status:"Concluído", inicio:"2026-07-28", previsto:"2026-08-07", entrega:"2026-08-06",
+   dor:[1,1,1,1,1,1], dod:[1,1,1,1,1,1], bloqueado:false, motivo:"", farolManual:"auto",
+   comentarios:[{data:"2026-08-06",texto:"Entregue 1 dia antes do previsto. Sem incidentes em produção."}]},
+
+  {id:"KRD-100", titulo:"Ajuste de limite dinâmico (fase 1)", sprint:"Sprint 35", prioridade:"Média", esforco:5,
+   status:"Concluído", inicio:"2026-07-30", previsto:"2026-08-11", entrega:"2026-08-13",
+   dor:[1,1,1,1,1,1], dod:[1,1,1,0,1,1], bloqueado:false, motivo:"", farolManual:"auto",
+   comentarios:[{data:"2026-08-13",texto:"Entregue com 2 dias de atraso; documentação ainda pendente."}]}
+];
+
+/* ============================================================
+   LÓGICA
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const HOJE = new Date(); HOJE.setHours(0,0,0,0);
+const FAROIS = {
+  verde:    {label:"No prazo", icone:"🟢"},
+  amarelo:  {label:"Atenção",  icone:"🟡"},
+  vermelho: {label:"Crítico",  icone:"🔴"},
+  entregue: {label:"Entregue", icone:"🔵"}
+};
+const ORDEM_FAROL = {vermelho:0, amarelo:1, verde:2, entregue:3};
+
+const d = s => { if(!s) return null; const p=s.split("-"); const x=new Date(+p[0],+p[1]-1,+p[2]); x.setHours(0,0,0,0); return x; };
+const dias = (a,b) => Math.round((b-a)/86400000);
+const fmt = s => s ? s.split("-").reverse().slice(0,2).join("/") + "/" + s.slice(2,4) : "—";
+const fmtCurto = s => s ? s.split("-").reverse().slice(0,2).join("/") : "—";
+const pct = arr => arr.length ? Math.round(100*arr.filter(Boolean).length/arr.length) : 0;
+const hojeISO = () => new Date(HOJE.getTime()-HOJE.getTimezoneOffset()*60000).toISOString().slice(0,10);
+
+function farol(it){
+  const motivos = [];
+  const dorP = pct(it.dor), dodP = pct(it.dod);
+  const idx = STATUSES.indexOf(it.status);
+  const prev = d(it.previsto);
+  let nivel = "verde";
+  const sobe = n => { if(ORDEM_FAROL[n] < ORDEM_FAROL[nivel]) nivel = n; };
+
+  if(it.status === "Concluído"){
+    if(dodP < 100){
+      motivos.push(`Marcada como concluída com D.O.D em ${dodP}% — faltam: ${DOD_ITENS.filter((_,i)=>!it.dod[i]).join("; ")}`);
+      nivel = "amarelo";
+    } else {
+      nivel = "entregue";
+      const ent = d(it.entrega);
+      if(ent && prev){
+        const df = dias(prev, ent);
+        motivos.push(df > 0 ? `Entregue ${df} dia(s) após o previsto.` : df < 0 ? `Entregue ${-df} dia(s) antes do previsto.` : "Entregue na data prevista.");
+      } else motivos.push("D.O.D 100% cumprido.");
+    }
+    return {nivel, motivos, dorP, dodP};
+  }
+
+  if(it.bloqueado){ sobe("vermelho"); motivos.push("Bloqueada" + (it.motivo ? `: ${it.motivo}` : " (motivo não informado)")); }
+
+  if(prev){
+    const restam = dias(HOJE, prev);
+    if(restam < 0){ sobe("vermelho"); motivos.push(`Atrasada: prazo previsto venceu há ${-restam} dia(s) (${fmt(it.previsto)}).`); }
+    else if(restam <= 3){ sobe("amarelo"); motivos.push(restam === 0 ? "Prazo previsto é hoje." : `Prazo previsto em ${restam} dia(s).`); }
+  } else if(idx >= 1){
+    sobe("amarelo"); motivos.push("Sem data prevista definida.");
+  }
+
+  if(dorP < 100){
+    const falta = DOR_ITENS.filter((_,i)=>!it.dor[i]).join("; ");
+    if(idx >= STATUSES.indexOf("Em Desenvolvimento")){
+      sobe("vermelho"); motivos.push(`Entrou em desenvolvimento com D.O.R em ${dorP}% — faltam: ${falta}`);
+    } else if(idx === STATUSES.indexOf("Pronto para Dev")){
+      sobe("amarelo"); motivos.push(`Marcada como pronta, mas D.O.R está em ${dorP}% — faltam: ${falta}`);
+    }
+  }
+
+  if(nivel === "verde" && !motivos.length) motivos.push("Sem bloqueios, dentro do prazo e checklist coerente com o estágio.");
+  return {nivel, motivos, dorP, dodP};
+}
+
+function farolFinal(it){
+  const auto = farol(it);
+  if(it.farolManual && it.farolManual !== "auto"){
+    return {nivel: it.farolManual, motivos: ["Farol definido manualmente." , ...auto.motivos], dorP: auto.dorP, dodP: auto.dodP, manual:true};
+  }
+  return auto;
+}
+
+/* ---------- estado de UI ---------- */
+let ordem = {campo:"farol", asc:true}, selecionado = null;
+
+function filtrados(){
+  const q = $("#busca").value.trim().toLowerCase();
+  const fs = $("#fSprint").value, fst = $("#fStatus").value, fp = $("#fPri").value, ff = $("#fFarol").value;
+  let out = DADOS.filter(it=>{
+    const f = farolFinal(it);
+    if(q && !(it.titulo+" "+it.id+" "+(it.comentarios.map(c=>c.texto).join(" "))).toLowerCase().includes(q)) return false;
+    if(fs && it.sprint !== fs) return false;
+    if(fst && it.status !== fst) return false;
+    if(fp && it.prioridade !== fp) return false;
+    if(ff && f.nivel !== ff) return false;
+    return true;
+  });
+  const key = it => {
+    const f = farolFinal(it);
+    switch(ordem.campo){
+      case "farol": return ORDEM_FAROL[f.nivel]*1000 + PRIORIDADES.indexOf(it.prioridade);
+      case "dor": return f.dorP; case "dod": return f.dodP;
+      case "prioridade": return PRIORIDADES.indexOf(it.prioridade);
+      case "status": return STATUSES.indexOf(it.status);
+      case "esforco": return it.esforco || 0;
+      case "previsto": return it.previsto || "9999";
+      default: return (it[ordem.campo] ?? "").toString().toLowerCase();
+    }
+  };
+  out.sort((a,b)=>{ const A=key(a),B=key(b); const r = A<B?-1:A>B?1:0; return ordem.asc?r:-r; });
+  return out;
+}
+
+function pillFarol(f){
+  return `<span class="pill ${f.nivel}">${FAROIS[f.nivel].icone} ${FAROIS[f.nivel].label}${f.manual?" ·M":""}</span>`;
+}
+function mini(p, tipo){
+  const cor = p===100 ? "var(--good)" : p>=50 ? "var(--warning)" : "var(--critical)";
+  return `<div class="mini"><div class="mini-track"><div class="mini-fill" style="width:${p}%;background:${cor}"></div></div><span class="mini-txt">${p}%</span></div>`;
+}
+
+function renderKpis(){
+  const ativas = DADOS.filter(i=>i.status!=="Concluído");
+  const c = {verde:0,amarelo:0,vermelho:0,entregue:0};
+  DADOS.forEach(i=>c[farolFinal(i).nivel]++);
+  const bloq = DADOS.filter(i=>i.bloqueado && i.status!=="Concluído").length;
+  const esf = ativas.reduce((s,i)=>s+(+i.esforco||0),0);
+  const entregues = DADOS.filter(i=>i.status==="Concluído").length;
+  const cards = [
+    {lbl:"Demandas ativas", val:ativas.length, foot:`${esf} pts em aberto · ${entregues} entregues`},
+    {lbl:"Crítico", val:c.vermelho, foot:bloq?`${bloq} bloqueada(s)`:"sem bloqueios", dot:"vermelho"},
+    {lbl:"Atenção", val:c.amarelo, foot:"risco de prazo ou checklist", dot:"amarelo"},
+    {lbl:"No prazo", val:c.verde, foot:"seguindo bem", dot:"verde"},
+    {lbl:"Entregue", val:c.entregue, foot:"D.O.D 100%", dot:"entregue"}
+  ];
+  $("#kpis").innerHTML = cards.map(k=>`
+    <div class="card kpi">
+      <div class="lbl">${k.dot?`<i class="dot ${k.dot}"></i>`:""}${k.lbl}</div>
+      <div class="val">${k.val}</div>
+      <div class="foot">${k.foot}</div>
+    </div>`).join("");
+}
+
+function renderCharts(){
+  const cont = STATUSES.map(s=>({s, n: DADOS.filter(i=>i.status===s).length}));
+  const max = Math.max(1, ...cont.map(x=>x.n));
+  $("#chartStatus").innerHTML = cont.map(x=>`
+    <div class="hbar-row">
+      <div class="hbar-lbl" title="${x.s}">${x.s}</div>
+      <div class="hbar-track"><div class="hbar-fill" style="width:${100*x.n/max}%"></div></div>
+      <div class="hbar-val">${x.n}</div>
+    </div>`).join("") + `<div class="legend"><span>Total de ${DADOS.length} demandas · maior fila: ${cont.slice().sort((a,b)=>b.n-a.n)[0].s}</span></div>`;
+
+  const sprints = [...new Set(DADOS.map(i=>i.sprint))].sort();
+  const cores = {vermelho:"var(--critical)",amarelo:"var(--warning)",verde:"var(--good)",entregue:"var(--series-1)"};
+  $("#chartSprint").innerHTML = sprints.map(sp=>{
+    const itens = DADOS.filter(i=>i.sprint===sp);
+    const c = {vermelho:0,amarelo:0,verde:0,entregue:0};
+    itens.forEach(i=>c[farolFinal(i).nivel]++);
+    const seg = ["vermelho","amarelo","verde","entregue"].filter(k=>c[k]>0)
+      .map(k=>`<i style="background:${cores[k]};flex:${c[k]}" title="${sp}: ${c[k]} ${FAROIS[k].label}"></i>`).join("");
+    return `<div class="stack-row"><div class="stack-top"><span>${sp}</span><span>${itens.length} · ${c.vermelho?"🔴"+c.vermelho+" ":""}${c.amarelo?"🟡"+c.amarelo+" ":""}${c.verde?"🟢"+c.verde+" ":""}${c.entregue?"🔵"+c.entregue:""}</span></div><div class="stack">${seg}</div></div>`;
+  }).join("") + `<div class="legend">${["vermelho","amarelo","verde","entregue"].map(k=>`<span>${FAROIS[k].icone} ${FAROIS[k].label}</span>`).join("")}</div>`;
+}
+
+function renderTabela(){
+  const lista = filtrados();
+  const tb = $("#tbody");
+  tb.innerHTML = lista.map(it=>{
+    const f = farolFinal(it);
+    const ult = it.comentarios.length ? it.comentarios[it.comentarios.length-1] : null;
+    return `<tr data-id="${it.id}" class="${selecionado===it.id?"sel":""}">
+      <td class="id">${it.id}</td>
+      <td class="tit">${it.titulo}${it.bloqueado?`<span class="blk">⛔ Bloqueada${it.motivo?": "+it.motivo:""}</span>`:""}</td>
+      <td class="nowrap">${it.sprint||"—"}</td>
+      <td><span class="pri ${it.prioridade}">${it.prioridade}</span></td>
+      <td class="num">${it.esforco||"—"}</td>
+      <td class="nowrap"><span class="pill neutro">${it.status}</span></td>
+      <td>${mini(f.dorP)}</td>
+      <td>${mini(f.dodP)}</td>
+      <td class="nowrap">${fmtCurto(it.previsto)}</td>
+      <td>${pillFarol(f)}</td>
+      <td><div class="cmt">${ult?`<b style="color:var(--muted);font-weight:600">${fmtCurto(ult.data)}</b> ${ult.texto}`:"—"}</div></td>
+    </tr>`;
+  }).join("");
+  $("#vazio").hidden = lista.length > 0;
+  $("#contador").textContent = `${lista.length} de ${DADOS.length} demandas`;
+  $("#subtitulo").textContent = `Atualizado em ${fmt(hojeISO())} · D.O.R, Status, D.O.D e farol de risco`;
+  tb.querySelectorAll("tr").forEach(tr=>tr.onclick=()=>abrir(tr.dataset.id));
+}
+
+function renderTudo(){ renderKpis(); renderCharts(); renderTabela(); }
+
+/* ---------- selects ---------- */
+function popular(){
+  const sprints = [...new Set(DADOS.map(i=>i.sprint).filter(Boolean))].sort();
+  const set = (el, opts, todos) => {
+    const v = $(el).value;
+    $(el).innerHTML = `<option value="">${todos}</option>` + opts.map(o=>`<option ${o===v?"selected":""}>${o}</option>`).join("");
+  };
+  set("#fSprint", sprints, "Todas");
+  set("#fStatus", STATUSES, "Todos");
+  set("#fPri", PRIORIDADES, "Todas");
+  const vf = $("#fFarol").value;
+  $("#fFarol").innerHTML = `<option value="">Todos</option>` + Object.entries(FAROIS)
+    .map(([k,v])=>`<option value="${k}" ${k===vf?"selected":""}>${v.icone} ${v.label}</option>`).join("");
+}
+
+/* ---------- drawer ---------- */
+function abrir(id){
+  const it = DADOS.find(i=>i.id===id); if(!it) return;
+  selecionado = id;
+  const f = farolFinal(it);
+  $("#dId").textContent = it.id + " · " + (it.sprint || "sem sprint");
+  $("#dTit").textContent = it.titulo;
+  $("#drawerBody").innerHTML = `
+    <div class="sec">
+      <div class="sec-t">Farol <span>${pillFarol(f)}</span></div>
+      <div class="why"><b>Por que está assim:</b><ul>${f.motivos.map(m=>`<li>${m}</li>`).join("")}</ul></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t">Dados da demanda</div>
+      <div class="fld" style="margin-bottom:10px"><span>Título</span><input type="text" id="e_titulo" value="${it.titulo.replace(/"/g,"&quot;")}"></div>
+      <div class="grid2">
+        <div class="fld"><span>Sprint</span><input type="text" id="e_sprint" value="${it.sprint||""}"></div>
+        <div class="fld"><span>Status</span><select id="e_status">${STATUSES.map(s=>`<option ${s===it.status?"selected":""}>${s}</option>`).join("")}</select></div>
+        <div class="fld"><span>Prioridade</span><select id="e_prioridade">${PRIORIDADES.map(s=>`<option ${s===it.prioridade?"selected":""}>${s}</option>`).join("")}</select></div>
+        <div class="fld"><span>Esforço (pontos)</span><input type="number" id="e_esforco" min="0" value="${it.esforco||""}"></div>
+        <div class="fld"><span>Início</span><input type="date" id="e_inicio" value="${it.inicio||""}"></div>
+        <div class="fld"><span>Previsto</span><input type="date" id="e_previsto" value="${it.previsto||""}"></div>
+        <div class="fld"><span>Entrega real</span><input type="date" id="e_entrega" value="${it.entrega||""}"></div>
+        <div class="fld"><span>Farol</span><select id="e_farolManual">
+          <option value="auto" ${it.farolManual==="auto"?"selected":""}>Automático</option>
+          ${Object.entries(FAROIS).map(([k,v])=>`<option value="${k}" ${it.farolManual===k?"selected":""}>${v.icone} ${v.label} (manual)</option>`).join("")}
+        </select></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t">Bloqueio</div>
+      <label class="chk ${it.bloqueado?"":""}" style="${it.bloqueado?"background:var(--critical-bg);border-color:var(--critical)":""}">
+        <input type="checkbox" id="e_bloqueado" ${it.bloqueado?"checked":""}>
+        <span><b>Demanda bloqueada</b> — impede o andamento agora</span>
+      </label>
+      <div class="fld"><span>Motivo do bloqueio / dependência</span><textarea id="e_motivo" placeholder="Ex.: aguardando acesso, decisão do jurídico, dependência de fornecedor…">${it.motivo||""}</textarea></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t">D.O.R — Definition of Ready <span>${f.dorP}%</span></div>
+      ${DOR_ITENS.map((t,i)=>`<label class="chk ${it.dor[i]?"done":""}"><input type="checkbox" data-dor="${i}" ${it.dor[i]?"checked":""}><span>${t}</span></label>`).join("")}
+    </div>
+
+    <div class="sec">
+      <div class="sec-t">D.O.D — Definition of Done <span>${f.dodP}%</span></div>
+      ${DOD_ITENS.map((t,i)=>`<label class="chk ${it.dod[i]?"done":""}"><input type="checkbox" data-dod="${i}" ${it.dod[i]?"checked":""}><span>${t}</span></label>`).join("")}
+    </div>
+
+    <div class="sec">
+      <div class="sec-t">Comentários para o gestor</div>
+      ${it.comentarios.length ? it.comentarios.slice().reverse().map((c,ri)=>{
+        const i = it.comentarios.length-1-ri;
+        return `<div class="hist"><b>${fmt(c.data)}</b> <button class="ghost" data-delc="${i}" style="border:none;padding:0 4px;color:var(--muted)" title="Remover">✕</button><p>${c.texto}</p></div>`;
+      }).join("") : `<div class="card-s" style="margin-bottom:8px">Nenhum comentário ainda.</div>`}
+      <div class="fld"><span>Novo comentário</span><textarea id="e_novoCmt" placeholder="O que o gestor precisa saber hoje sobre esta demanda?"></textarea></div>
+      <button id="btnAddCmt" style="margin-top:8px">Adicionar comentário</button>
+    </div>`;
+
+  const it2 = it;
+  const salvarCampos = () => {
+    it2.titulo = $("#e_titulo").value.trim() || it2.titulo;
+    it2.sprint = $("#e_sprint").value.trim();
+    it2.status = $("#e_status").value;
+    it2.prioridade = $("#e_prioridade").value;
+    it2.esforco = $("#e_esforco").value ? +$("#e_esforco").value : 0;
+    it2.inicio = $("#e_inicio").value;
+    it2.previsto = $("#e_previsto").value;
+    it2.entrega = $("#e_entrega").value;
+    it2.farolManual = $("#e_farolManual").value;
+    it2.bloqueado = $("#e_bloqueado").checked;
+    it2.motivo = $("#e_motivo").value.trim();
+    popular(); renderTudo(); abrirLeve(it2.id);
+  };
+  ["e_titulo","e_sprint","e_status","e_prioridade","e_esforco","e_inicio","e_previsto","e_entrega","e_farolManual","e_bloqueado","e_motivo"]
+    .forEach(id=>{ const el=$("#"+id); if(el) el.addEventListener("change", salvarCampos); });
+
+  $("#drawerBody").querySelectorAll("[data-dor]").forEach(cb=>cb.onchange=()=>{ it2.dor[+cb.dataset.dor]=cb.checked?1:0; renderTudo(); abrirLeve(it2.id); });
+  $("#drawerBody").querySelectorAll("[data-dod]").forEach(cb=>cb.onchange=()=>{ it2.dod[+cb.dataset.dod]=cb.checked?1:0; renderTudo(); abrirLeve(it2.id); });
+  $("#drawerBody").querySelectorAll("[data-delc]").forEach(b=>b.onclick=e=>{ e.preventDefault(); it2.comentarios.splice(+b.dataset.delc,1); renderTudo(); abrirLeve(it2.id); });
+  $("#btnAddCmt").onclick = ()=>{
+    const t = $("#e_novoCmt").value.trim(); if(!t) return;
+    it2.comentarios.push({data: hojeISO(), texto: t});
+    renderTudo(); abrirLeve(it2.id); toast("Comentário adicionado");
+  };
+
+  $("#dExcluir").hidden = false; $("#dFechar2").textContent = "Concluir edição";
+  $("#drawer").classList.add("on"); $("#drawer").setAttribute("aria-hidden","false"); $("#scrim").classList.add("on");
+}
+function modoRelatorio(){ $("#dExcluir").hidden = true; $("#dFechar2").textContent = "Fechar"; }
+function abrirLeve(id){ const y = $("#drawerBody").scrollTop; abrir(id); $("#drawerBody").scrollTop = y; }
+function fechar(){ $("#drawer").classList.remove("on"); $("#drawer").setAttribute("aria-hidden","true"); $("#scrim").classList.remove("on"); selecionado=null; renderTabela(); }
+
+/* ---------- resumo para o gestor ---------- */
+function resumo(){
+  const grupos = {vermelho:[],amarelo:[],verde:[],entregue:[]};
+  DADOS.forEach(i=>grupos[farolFinal(i).nivel].push(i));
+  const linha = i => {
+    const f = farolFinal(i);
+    const ult = i.comentarios.length ? i.comentarios[i.comentarios.length-1].texto : "";
+    return `• ${i.id} — ${i.titulo} (${i.sprint||"sem sprint"}, ${i.status}, prev. ${fmt(i.previsto)})\n    Motivo: ${f.motivos[0]}${ult?`\n    Nota: ${ult}`:""}`;
+  };
+  const bloco = (k, tit) => grupos[k].length ? `\n${FAROIS[k].icone} ${tit} (${grupos[k].length})\n${grupos[k].map(linha).join("\n")}\n` : "";
+  const ativas = DADOS.filter(i=>i.status!=="Concluído");
+  const concl = DADOS.length - ativas.length;
+  return `STATUS DO BACKLOG — ${fmt(hojeISO())}
+${"=".repeat(52)}
+${ativas.length} demanda(s) ativa(s) · ${ativas.reduce((s,i)=>s+(+i.esforco||0),0)} pontos em aberto · ${concl} concluída(s)
+Farol: 🔴 ${grupos.vermelho.length}  |  🟡 ${grupos.amarelo.length}  |  🟢 ${grupos.verde.length}  |  🔵 ${grupos.entregue.length}
+${bloco("vermelho","PRECISA DE DECISÃO / ATENÇÃO IMEDIATA")}${bloco("amarelo","EM RISCO — MONITORANDO")}${bloco("verde","CAMINHANDO NO PRAZO")}${bloco("entregue","ENTREGUES")}`;
+}
+
+/* ---------- copiar (com fallbacks para iframe / contexto restrito) ---------- */
+async function copiarTexto(txt, el){
+  if(el){ el.focus(); el.select(); el.setSelectionRange(0, txt.length); }
+  try{ if(document.execCommand && document.execCommand("copy")){ toast("Copiado para a área de transferência"); return; } }catch(e){}
+  try{ await navigator.clipboard.writeText(txt); toast("Copiado para a área de transferência"); return; }catch(e){}
+  if(!el){
+    const ta = document.createElement("textarea");
+    ta.value = txt; ta.style.cssText = "position:fixed;top:-1000px";
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); toast("Copiado"); }catch(e){ toast("Não foi possível copiar automaticamente"); }
+    ta.remove(); return;
+  }
+  toast("Texto já está selecionado — use Ctrl+C (⌘+C)");
+}
+
+/* ---------- export / import ---------- */
+function baixar(nome, conteudo, tipo){
+  try{
+    const b = new Blob([conteudo],{type:tipo});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(b); a.download = nome; a.rel = "noopener";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  }catch(e){ mostrarTexto(nome, conteudo); }
+}
+/* se o download for bloqueado (visualização dentro de painel), mostra o conteúdo para copiar */
+function mostrarTexto(titulo, conteudo){
+  $("#dId").textContent = "Download bloqueado neste modo de visualização";
+  $("#dTit").textContent = titulo;
+  $("#drawerBody").innerHTML = `<div class="sec">
+    <div class="card-s" style="margin-bottom:10px">Copie o conteúdo abaixo e salve num arquivo com este nome, ou abra o painel direto no navegador para baixar normalmente.</div>
+    <textarea class="report" id="rep" readonly></textarea>
+    <button class="primary" id="btnCopiar" style="margin-top:12px">Copiar conteúdo</button></div>`;
+  $("#rep").value = conteudo;
+  $("#btnCopiar").onclick = ()=>copiarTexto(conteudo, $("#rep"));
+  selecionado = null; modoRelatorio();
+  $("#drawer").classList.add("on"); $("#scrim").classList.add("on");
+}
+function csv(){
+  const head = ["ID","Demanda","Sprint","Prioridade","Esforço","Status","Início","Previsto","Entrega","D.O.R %","D.O.D %","Bloqueada","Motivo","Farol","Motivo do farol","Último comentário"];
+  const esc = v => `"${String(v??"").replace(/"/g,'""')}"`;
+  const rows = DADOS.map(i=>{ const f=farolFinal(i); const u=i.comentarios.length?i.comentarios[i.comentarios.length-1]:null;
+    return [i.id,i.titulo,i.sprint,i.prioridade,i.esforco,i.status,i.inicio,i.previsto,i.entrega,f.dorP,f.dodP,i.bloqueado?"Sim":"Não",i.motivo,FAROIS[f.nivel].label,f.motivos.join(" | "),u?`${u.data}: ${u.texto}`:""].map(esc).join(";");
+  });
+  baixar(`backlog-${hojeISO()}.csv`, "﻿"+[head.map(esc).join(";"),...rows].join("\n"), "text/csv;charset=utf-8");
+}
+function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); setTimeout(()=>t.classList.remove("on"),1900); }
+
+function novaDemanda(){
+  const nums = DADOS.map(i=>+(i.id.match(/(\d+)$/)?.[1]||0));
+  const id = "KRD-" + String(Math.max(100,...nums)+1).padStart(3,"0");
+  DADOS.unshift({id, titulo:"Nova demanda", sprint:"", prioridade:"Média", esforco:0, status:"Backlog",
+    inicio:"", previsto:"", entrega:"", dor:DOR_ITENS.map(()=>0), dod:DOD_ITENS.map(()=>0),
+    bloqueado:false, motivo:"", farolManual:"auto", comentarios:[]});
+  popular(); renderTudo(); abrir(id);
+}
+
+/* ---------- eventos ---------- */
+["busca","fSprint","fStatus","fPri","fFarol"].forEach(id=>$("#"+id).addEventListener("input", renderTabela));
+$("#btnLimpar").onclick = ()=>{ ["busca","fSprint","fStatus","fPri","fFarol"].forEach(id=>$("#"+id).value=""); renderTabela(); };
+document.querySelectorAll("th[data-sort]").forEach(th=>th.onclick=()=>{
+  const c = th.dataset.sort;
+  ordem = {campo:c, asc: ordem.campo===c ? !ordem.asc : true};
+  document.querySelectorAll("th[data-sort]").forEach(x=>x.querySelector(".arrow")?.remove());
+  th.insertAdjacentHTML("beforeend", `<span class="arrow"> ${ordem.asc?"↑":"↓"}</span>`);
+  renderTabela();
+});
+$("#scrim").onclick = fechar; $("#dFechar").onclick = fechar; $("#dFechar2").onclick = fechar;
+$("#dExcluir").onclick = ()=>{ DADOS = DADOS.filter(i=>i.id!==selecionado); fechar(); popular(); renderTudo(); toast("Demanda excluída"); };
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") fechar(); });
+$("#btnNova").onclick = novaDemanda;
+$("#btnCsv").onclick = csv;
+$("#btnPrint").onclick = ()=>window.print();
+$("#btnSalvar").onclick = ()=>{ baixar(`backlog-${hojeISO()}.json`, JSON.stringify({versao:1, atualizado:hojeISO(), demandas:DADOS}, null, 2), "application/json"); toast("Arquivo salvo — guarde para carregar depois"); };
+$("#btnCarregar").onclick = ()=>$("#fileIn").click();
+$("#fileIn").onchange = e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const j = JSON.parse(r.result);
+      const arr = Array.isArray(j) ? j : j.demandas;
+      if(!Array.isArray(arr)) throw new Error("formato");
+      DADOS = arr.map(i=>({
+        id:i.id||"—", titulo:i.titulo||"", sprint:i.sprint||"", prioridade:PRIORIDADES.includes(i.prioridade)?i.prioridade:"Média",
+        esforco:+i.esforco||0, status:STATUSES.includes(i.status)?i.status:"Backlog",
+        inicio:i.inicio||"", previsto:i.previsto||"", entrega:i.entrega||"",
+        dor:DOR_ITENS.map((_,k)=>i.dor?.[k]?1:0), dod:DOD_ITENS.map((_,k)=>i.dod?.[k]?1:0),
+        bloqueado:!!i.bloqueado, motivo:i.motivo||"", farolManual:i.farolManual||"auto",
+        comentarios:Array.isArray(i.comentarios)?i.comentarios:[]
+      }));
+      popular(); renderTudo(); toast(`${DADOS.length} demandas carregadas`);
+    }catch(err){ toast("Não consegui ler esse arquivo JSON"); }
+    e.target.value = "";
+  };
+  r.readAsText(f);
+};
+$("#btnResumo").onclick = ()=>{
+  const txt = resumo();
+  $("#dId").textContent = "Relatório";
+  $("#dTit").textContent = "Resumo para o gestor";
+  $("#drawerBody").innerHTML = `
+    <div class="sec">
+      <div class="card-s" style="margin-bottom:10px">Texto gerado a partir do backlog atual — copie e cole no e-mail, Teams ou 1:1.</div>
+      <textarea class="report" id="rep" readonly spellcheck="false"></textarea>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="primary" id="btnCopiar">Copiar texto</button>
+        <button id="btnBaixarTxt">Baixar .txt</button>
+      </div>
+      <div class="card-s" style="margin-top:8px">Se o botão não copiar (acontece em alguns visualizadores), o texto já fica selecionado — basta Ctrl+C / ⌘+C.</div>
+    </div>`;
+  $("#rep").value = txt;
+  $("#btnCopiar").onclick = ()=>copiarTexto(txt, $("#rep"));
+  $("#btnBaixarTxt").onclick = ()=>baixar(`status-backlog-${hojeISO()}.txt`, txt, "text/plain;charset=utf-8");
+  selecionado = null; modoRelatorio();
+  $("#drawer").classList.add("on"); $("#scrim").classList.add("on");
+};
+$("#btnTema").onclick = ()=>{
+  const cur = document.documentElement.getAttribute("data-theme");
+  document.documentElement.setAttribute("data-theme", cur==="dark"?"light":"dark");
+};
+if(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
+  document.documentElement.setAttribute("data-theme","dark");
+
+popular(); renderTudo();
+</script>
+</body>
+</html>
